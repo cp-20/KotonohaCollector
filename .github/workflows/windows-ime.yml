@@ -1,0 +1,70 @@
+name: windows-ime
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/windows-ime.yml"
+      - "windows/**"
+  pull_request:
+    paths:
+      - ".github/workflows/windows-ime.yml"
+      - "windows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout KotonohaCollector
+        uses: actions/checkout@v7
+
+      - name: Prepare pinned Mozc source
+        id: prepare
+        shell: pwsh
+        run: |
+          $buildDirectory = & .\windows\scripts\Prepare-Mozc.ps1 | Select-Object -Last 1
+          "build_directory=$buildDirectory" >> $env:GITHUB_OUTPUT
+
+      - name: Restore Mozc dependency cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.prepare.outputs.build_directory }}\src\third_party_cache
+          key: mozc-windows-${{ runner.os }}-851c3fe33060d2a6090363e4d7ec44fafde2c03d-v1
+
+      - name: Fetch Mozc dependencies
+        shell: pwsh
+        working-directory: ${{ steps.prepare.outputs.build_directory }}\src
+        run: python build_tools/update_deps.py
+
+      - name: Build Qt
+        shell: pwsh
+        working-directory: ${{ steps.prepare.outputs.build_directory }}\src
+        run: python build_tools/build_qt.py --release --confirm_license
+
+      - name: Run collector unit tests
+        shell: pwsh
+        working-directory: ${{ steps.prepare.outputs.build_directory }}\src
+        run: bazelisk test //kotonoha:event_builder_test --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
+
+      - name: Build Windows IME package
+        shell: pwsh
+        working-directory: ${{ steps.prepare.outputs.build_directory }}\src
+        run: bazelisk build package --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
+
+      - name: Stage MSI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path .\windows\dist -Force | Out-Null
+          Copy-Item -LiteralPath "${{ steps.prepare.outputs.build_directory }}\src\bazel-bin\win32\installer\Mozc64.msi" -Destination .\windows\dist\KotonohaCollector-Windows-x64.msi
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v7
+        with:
+          name: KotonohaCollector-Windows-x64
+          path: windows/dist/KotonohaCollector-Windows-x64.msi
+          if-no-files-found: error
