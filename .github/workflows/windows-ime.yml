@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-ime-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-2025
@@ -41,10 +45,33 @@ jobs:
         working-directory: ${{ steps.prepare.outputs.build_directory }}\src
         run: python build_tools/update_deps.py
 
+      - name: Restore prebuilt Qt cache
+        id: qt-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.prepare.outputs.build_directory }}\src\third_party\qt
+          key: mozc-qt-${{ runner.os }}-${{ runner.arch }}-851c3fe33060d2a6090363e4d7ec44fafde2c03d-6.9.1-release-v1
+
       - name: Build Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: pwsh
         working-directory: ${{ steps.prepare.outputs.build_directory }}\src
         run: python build_tools/build_qt.py --release --confirm_license
+
+      - name: Verify Qt
+        shell: pwsh
+        run: |
+          $qtDirectory = Join-Path "${{ steps.prepare.outputs.build_directory }}" 'src\third_party\qt'
+          $requiredFiles = @(
+            (Join-Path $qtDirectory 'bin\moc.exe'),
+            (Join-Path $qtDirectory 'bin\Qt6Core.dll'),
+            (Join-Path $qtDirectory 'lib\Qt6Core.lib')
+          )
+          foreach ($requiredFile in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
+              throw "Qt cache/build is incomplete: $requiredFile"
+            }
+          }
 
       - name: Run Windows IME unit tests
         shell: pwsh
