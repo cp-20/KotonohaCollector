@@ -284,3 +284,142 @@ index ea09b145..f22f322c 100644
  #endif
      IDS_INPUTMODE           "Input Mode"
      IDS_WIN8_TRAY_ITEM      "Right click to show IME options"
+diff --git a/src/renderer/renderer_style.textproto b/src/renderer/renderer_style.textproto
+index 79ea344e..19ecbc41 100644
+--- a/src/renderer/renderer_style.textproto
++++ b/src/renderer/renderer_style.textproto
+@@ -31,19 +31,20 @@
+ # proto-message: RendererStyle
+ window_border: 1
+-scrollbar_width: 4
+-row_rect_padding: 1
+-border_color { r: 150 g: 150 b: 150 }
++scrollbar_width: 3
++row_rect_padding: 6
++border_color { r: 204 g: 204 b: 204 }
+ shortcut_style {
+-  font_size: 14
+-  foreground_color { r: 97 g: 97 b: 97 }
+-  background_color { r: 243 g: 244 b: 255 }
+-  left_padding: 8
+-  right_padding: 8
++  font_size: 15
++  foreground_color { r: 0 g: 0 b: 0 }
++  background_color { r: 255 g: 255 b: 255 }
++  left_padding: 10
++  right_padding: 6
+ }
+-gap1_style { font_size: 14 }
++gap1_style { font_size: 15 }
+ candidate_style {
+-  font_size: 14
++  font_size: 16
+   foreground_color { r: 0 g: 0 b: 0 }
++  background_color { r: 255 g: 255 b: 255 }
+ }
+ description_style {
+   font_size: 12
+@@ -55,24 +56,24 @@ description_style {
+ column_minimum_width_string: "そのほかの文字種"
+ footer_style {
+-  font_size: 14
+-  foreground_color { r: 76 g: 76 b: 76 }
+-  left_padding: 4
+-  right_padding: 4
++  font_size: 12
++  foreground_color { r: 71 g: 71 b: 71 }
++  left_padding: 6
++  right_padding: 6
+ }
+ footer_sub_label_style {
+   font_size: 10
+-  foreground_color { r: 167 g: 167 b: 167 }
+-  left_padding: 4
+-  right_padding: 4
++  foreground_color { r: 137 g: 137 b: 137 }
++  left_padding: 6
++  right_padding: 6
+ }
+-footer_border_colors { r: 96 g: 96 b: 96 }
+-footer_top_color { r: 255 g: 255 b: 255 }
+-footer_bottom_color { r: 238 g: 238 b: 238 }
++footer_border_colors { r: 204 g: 204 b: 204 }
++footer_top_color { r: 242 g: 242 b: 242 }
++footer_bottom_color { r: 242 g: 242 b: 242 }
+ logo_file_name: "candidate_window_logo.tiff"
+-focused_background_color { r: 209 g: 234 b: 255 }
+-focused_border_color { r: 127 g: 172 b: 221 }
+-scrollbar_background_color { r: 224 g: 224 b: 224 }
+-scrollbar_indicator_color { r: 117 g: 144 b: 184 }
++focused_background_color { r: 153 g: 201 b: 239 }
++focused_border_color { r: 153 g: 201 b: 239 }
++scrollbar_background_color { r: 242 g: 242 b: 242 }
++scrollbar_indicator_color { r: 137 g: 137 b: 137 }
+ infolist_style {
+   caption_string: "用例"
+   caption_height: 20
+@@ -80,11 +81,11 @@ infolist_style {
+   caption_style { font_size: 12 left_padding: 2 }
+-  caption_background_color { r: 236 g: 240 b: 250 }
++  caption_background_color { r: 242 g: 242 b: 242 }
+   window_border: 1
+-  row_rect_padding: 2
++  row_rect_padding: 6
+   window_width: 300
+   title_style { font_size: 15 left_padding: 5 }
+   description_style { font_size: 12 left_padding: 15 }
+-  border_color { r: 150 g: 150 b: 150 }
+-  focused_background_color { r: 209 g: 234 b: 255 }
+-  focused_border_color { r: 127 g: 172 b: 221 }
++  border_color { r: 204 g: 204 b: 204 }
++  focused_background_color { r: 153 g: 201 b: 239 }
++  focused_border_color { r: 153 g: 201 b: 239 }
+ }
+diff --git a/src/renderer/renderer_style_handler_test.cc b/src/renderer/renderer_style_handler_test.cc
+index 145ec1aa..bf607bd4 100644
+--- a/src/renderer/renderer_style_handler_test.cc
++++ b/src/renderer/renderer_style_handler_test.cc
+@@ -41,4 +41,12 @@ TEST(RendererStyleHandlerTest, GetRendererStyle) {
+   EXPECT_TRUE(style.has_window_border());
+   EXPECT_TRUE(style.has_infolist_style());
+   EXPECT_TRUE(style.infolist_style().has_focused_border_color());
++#ifdef KOTONOHA_COLLECTOR_BUILD
++  EXPECT_EQ(style.row_rect_padding(), 6);
++  EXPECT_EQ(style.border_color().r(), 204);
++  EXPECT_EQ(style.focused_background_color().r(), 153);
++  EXPECT_EQ(style.focused_background_color().g(), 201);
++  EXPECT_EQ(style.focused_background_color().b(), 239);
++  EXPECT_EQ(style.footer_top_color().r(), style.footer_bottom_color().r());
++#endif  // KOTONOHA_COLLECTOR_BUILD
+ }
+diff --git a/src/win32/base/keyevent_handler.cc b/src/win32/base/keyevent_handler.cc
+index 192667cd..8de27c86 100644
+--- a/src/win32/base/keyevent_handler.cc
++++ b/src/win32/base/keyevent_handler.cc
+@@ -79,7 +79,12 @@ const KeyEvent::SpecialKey kSpecialKeyMap[] = {
+     KeyEvent::NO_SPECIALKEY,  // 0x11: VK_CONTROL
+     KeyEvent::NO_SPECIALKEY,  // 0x12: VK_MENU
+     KeyEvent::NO_SPECIALKEY,  // 0x13: VK_PAUSE
++#ifdef KOTONOHA_COLLECTOR_BUILD
++    // Use Caps Lock as the familiar Japanese IME on/off toggle.
++    KeyEvent::HANKAKU,        // 0x14: VK_CAPITAL
++#else
+     KeyEvent::CAPS_LOCK,      // 0x14: VK_CAPITAL
++#endif  // KOTONOHA_COLLECTOR_BUILD
+     KeyEvent::NO_SPECIALKEY,  // 0x15: VK_HANGUL, VK_KANA
+     KeyEvent::ON,             // 0x16: VK_IME_ON
+     KeyEvent::NO_SPECIALKEY,  // 0x17: VK_JUNJA
+diff --git a/src/win32/base/keyevent_handler_test.cc b/src/win32/base/keyevent_handler_test.cc
+index d628371c..180791ad 100644
+--- a/src/win32/base/keyevent_handler_test.cc
++++ b/src/win32/base/keyevent_handler_test.cc
+@@ -2785,5 +2785,9 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
+     EXPECT_EQ(actual_input.key().modifier_keys_size(), 0);
+     EXPECT_TRUE(actual_input.key().has_special_key());
++#ifdef KOTONOHA_COLLECTOR_BUILD
++    EXPECT_EQ(actual_input.key().special_key(), commands::KeyEvent::HANKAKU);
++#else
+     EXPECT_EQ(actual_input.key().special_key(), commands::KeyEvent::CAPS_LOCK);
++#endif  // KOTONOHA_COLLECTOR_BUILD
+   }
+ }

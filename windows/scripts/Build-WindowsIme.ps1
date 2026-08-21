@@ -21,8 +21,8 @@ try {
         & python build_tools/build_qt.py --release --confirm_license
         if ($LASTEXITCODE -ne 0) { throw 'Failed to build Qt.' }
     }
-    & bazelisk test //kotonoha:event_builder_test --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
-    if ($LASTEXITCODE -ne 0) { throw 'Windows collector tests failed.' }
+    & bazelisk test //kotonoha:event_builder_test //renderer:renderer_style_handler_test //win32/base:keyevent_handler_test --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
+    if ($LASTEXITCODE -ne 0) { throw 'Windows IME tests failed.' }
     & bazelisk build package --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
     if ($LASTEXITCODE -ne 0) { throw 'Windows IME build failed.' }
 }
