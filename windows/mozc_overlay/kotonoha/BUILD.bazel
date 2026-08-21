@@ -1,0 +1,49 @@
+load(
+    "//:build_defs.bzl",
+    "mozc_cc_library",
+    "mozc_cc_test",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+mozc_cc_library(
+    name = "event_builder",
+    srcs = ["event_builder.cc"],
+    hdrs = ["event_builder.h"],
+    deps = [
+        "//protocol:candidate_window_cc_proto",
+        "//protocol:commands_cc_proto",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+mozc_cc_library(
+    name = "collector",
+    srcs = ["collector.cc"],
+    hdrs = ["collector.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//session:__pkg__"],
+    deps = [
+        ":event_builder",
+        "//base:encryptor",
+        "//base:file_util",
+        "//base:system_util",
+        "//base:version",
+        "//protocol:commands_cc_proto",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+mozc_cc_test(
+    name = "event_builder_test",
+    size = "small",
+    srcs = ["event_builder_test.cc"],
+    deps = [
+        ":event_builder",
+        "//protocol:candidate_window_cc_proto",
+        "//protocol:commands_cc_proto",
+        "//testing:gunit_main",
+    ],
+)

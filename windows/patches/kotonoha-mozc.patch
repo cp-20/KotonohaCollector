@@ -1,0 +1,286 @@
+diff --git a/src/base/const.h b/src/base/const.h
+index 30a5013e..5a7cc9c5 100644
+--- a/src/base/const.h
++++ b/src/base/const.h
+@@ -34,6 +34,9 @@ namespace mozc {
+ #ifdef GOOGLE_JAPANESE_INPUT_BUILD
+ inline constexpr char kProductNameInEnglish[] = "Google Japanese Input";
+ #define kProductPrefix "GoogleJapaneseInput"
++#elif defined(KOTONOHA_COLLECTOR_BUILD)
++inline constexpr char kProductNameInEnglish[] = "KotonohaCollector";
++#define kProductPrefix "KotonohaCollector"
+ #else  // GOOGLE_JAPANESE_INPUT_BUILD
+ inline constexpr char kProductNameInEnglish[] = "Mozc";
+ #define kProductPrefix "Mozc"
+@@ -97,6 +100,43 @@ inline constexpr wchar_t kMozcRegKey[] =
+     L"Software\\Google\\Google Japanese Input";
+ inline constexpr wchar_t kElevatedProcessDisabledKey[] =
+     L"Software\\Policies\\Google\\Google Japanese Input\\Preferences";
++#elif defined(KOTONOHA_COLLECTOR_BUILD)
++inline constexpr char kCompanyNameInEnglish[] = "KotonohaCollector";
++inline constexpr char kEventPathPrefix[] = "Local\\KotonohaCollector.event.";
++inline constexpr char kMutexPathPrefix[] = "Local\\KotonohaCollector.mutex.";
++inline constexpr char kMozcServerName[] = "mozc_server.exe";
++inline constexpr char kIMEFile[] = "mozc_ja.ime";
++inline constexpr char kMozcTIP32[] = "mozc_tip32.dll";
++inline constexpr char kMozcTIP64[] = "mozc_tip64.dll";
++inline constexpr char kMozcTIP64X[] = "mozc_tip64x.dll";
++inline constexpr char kMozcBroker[] = "mozc_broker.exe";
++inline constexpr char kMozcTool[] = "mozc_tool.exe";
++inline constexpr char kMozcRenderer[] = "mozc_renderer.exe";
++inline constexpr char kMozcCacheServiceExeName[] = "mozc_cache_service.exe";
++inline constexpr wchar_t kMozcCacheServiceName[] =
++    L"KotonohaCollectorCacheService";
++inline constexpr wchar_t kMessageReceiverMessageName[] =
++    L"kotonoha_collector.renderer.message";
++inline constexpr wchar_t kMessageReceiverClassName[] =
++    L"kotonoha_collector.renderer.window";
++inline constexpr wchar_t kCandidateWindowClassName[] =
++    L"KotonohaCollectorCandidateWindow";
++inline constexpr wchar_t kCompositionWindowClassName[] =
++    L"KotonohaCollectorCompositionWindow";
++inline constexpr wchar_t kIndicatorWindowClassName[] =
++    L"KotonohaCollectorIndicatorWindow";
++inline constexpr wchar_t kInfolistWindowClassName[] =
++    L"KotonohaCollectorInfolistWindow";
++inline constexpr wchar_t kIMEUIWndClassName[] = L"KotohaUIWindow";
++inline constexpr char kIPCPrefix[] = "\\\\.\\pipe\\kotonoha_collector.";
++inline constexpr wchar_t kCandidateUIDescription[] =
++    L"KotonohaCollectorCandidateUI";
++inline constexpr wchar_t kConfigurationDisplayname[] =
++    L"KotonohaCollector Configuration";
++inline constexpr wchar_t kMozcRegKey[] =
++    L"Software\\KotonohaCollector\\KotonohaCollector";
++inline constexpr wchar_t kElevatedProcessDisabledKey[] =
++    L"Software\\Policies\\KotonohaCollector\\Preferences";
+ #else   // !GOOGLE_JAPANESE_INPUT_BUILD
+ inline constexpr char kCompanyNameInEnglish[] = "Mozc Project";
+ // Use Local prefix so that modules running under AppContainer can access.
+diff --git a/src/session/BUILD.bazel b/src/session/BUILD.bazel
+index 2da5b8d4..873ba75d 100644
+--- a/src/session/BUILD.bazel
++++ b/src/session/BUILD.bazel
+@@ -274,7 +274,9 @@ mozc_cc_library(
+         "@com_google_absl//absl/log",
+         "@com_google_absl//absl/strings",
+         "@com_google_absl//absl/time",
+-    ],
++    ] + mozc_select(
++        windows = ["//kotonoha:collector"],
++    ),
+ )
+ 
+ mozc_cc_binary(
+diff --git a/src/session/session_server.cc b/src/session/session_server.cc
+index 8a50a0bc..18a60f15 100644
+--- a/src/session/session_server.cc
++++ b/src/session/session_server.cc
+@@ -68,7 +68,12 @@ namespace mozc {
+ SessionServer::SessionServer()
+     : IPCServer(kSessionName, kNumConnections, kTimeOut),
+       session_handler_(
+-          std::make_unique<SessionHandler>(EngineFactory::Create().value())) {
++          std::make_unique<SessionHandler>(EngineFactory::Create().value()))
++#ifdef _WIN32
++      ,
++      kotonoha_collector_(std::make_unique<kotonoha::Collector>())
++#endif  // _WIN32
++{
+   // start session watch dog timer
+   session_handler_->StartWatchDog();
+ 
+@@ -103,6 +108,10 @@ bool SessionServer::Process(absl::string_view request, std::string* response) {
+     return false;
+   }
+ 
++#ifdef _WIN32
++  kotonoha_collector_->Observe(command);
++#endif  // _WIN32
++
+   if (!command.output().SerializeToString(response)) {
+     LOG(WARNING) << "SerializeToString() failed";
+     response->clear();
+diff --git a/src/session/session_server.h b/src/session/session_server.h
+index 2ce77bc5..dd84d43c 100644
+--- a/src/session/session_server.h
++++ b/src/session/session_server.h
+@@ -39,6 +39,10 @@
+ #include "ipc/ipc.h"
+ #include "session/session_handler.h"
+ 
++#ifdef _WIN32
++#include "kotonoha/collector.h"
++#endif  // _WIN32
++
+ namespace mozc {
+ 
+ // Session IPC Server
+@@ -63,6 +67,9 @@ class SessionServer : public IPCServer {
+ 
+  private:
+   std::unique_ptr<SessionHandler> session_handler_;
++#ifdef _WIN32
++  std::unique_ptr<kotonoha::Collector> kotonoha_collector_;
++#endif  // _WIN32
+ };
+ 
+ }  // namespace mozc
+diff --git a/src/win32/base/tsf_profile.cc b/src/win32/base/tsf_profile.cc
+index 120e6dcb..97c152cc 100644
+--- a/src/win32/base/tsf_profile.cc
++++ b/src/win32/base/tsf_profile.cc
+@@ -52,6 +52,22 @@ static const GUID kGoogleJapaneseInputProfile = {
+     0x4b1b,
+     {0xb4, 0x20, 0xfa, 0x98, 0x5b, 0xb0, 0xb8, 0x0d}};
+ 
++#elif defined(KOTONOHA_COLLECTOR_BUILD)
++
++// {9CC8ED59-88AD-4995-B180-0C585EFEE940}
++static const GUID kKotonohaCollectorTextService = {
++    0x9cc8ed59,
++    0x88ad,
++    0x4995,
++    {0xb1, 0x80, 0x0c, 0x58, 0x5e, 0xfe, 0xe9, 0x40}};
++
++// {6E4A9099-0F61-487A-8711-40CDB2068138}
++static const GUID kKotonohaCollectorProfile = {
++    0x6e4a9099,
++    0x0f61,
++    0x487a,
++    {0x87, 0x11, 0x40, 0xcd, 0xb2, 0x06, 0x81, 0x38}};
++
+ #else  // GOOGLE_JAPANESE_INPUT_BUILD
+ 
+ // {10A67BC8-22FA-4A59-90DC-2546652C56BF}
+@@ -78,6 +94,8 @@ const LANGID kTextServiceLanguage = MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT);
+ const GUID& TsfProfile::GetTextServiceGuid() {
+ #ifdef GOOGLE_JAPANESE_INPUT_BUILD
+   return kGoogleJapaneseInputTextService;
++#elif defined(KOTONOHA_COLLECTOR_BUILD)
++  return kKotonohaCollectorTextService;
+ #else   // GOOGLE_JAPANESE_INPUT_BUILD
+   return kMozcTextService;
+ #endif  // GOOGLE_JAPANESE_INPUT_BUILD
+@@ -86,6 +104,8 @@ const GUID& TsfProfile::GetTextServiceGuid() {
+ const GUID& TsfProfile::GetProfileGuid() {
+ #ifdef GOOGLE_JAPANESE_INPUT_BUILD
+   return kGoogleJapaneseInputProfile;
++#elif defined(KOTONOHA_COLLECTOR_BUILD)
++  return kKotonohaCollectorProfile;
+ #else   // GOOGLE_JAPANESE_INPUT_BUILD
+   return kMozcProfile;
+ #endif  // GOOGLE_JAPANESE_INPUT_BUILD
+diff --git a/src/win32/installer/build_installer.py b/src/win32/installer/build_installer.py
+index 4bccad8c..68a569a5 100644
+--- a/src/win32/installer/build_installer.py
++++ b/src/win32/installer/build_installer.py
+@@ -131,7 +131,7 @@ def run_wix4(args) -> None:
+         f'Software\\Google\\Update\\ClientState\\{{{omaha_guid}}}'
+     )
+   elif branding == 'Mozc':
+-    upgrade_code = 'DD94B570-B5E2-4100-9D42-61930C611D8A'
++    upgrade_code = '38726445-7517-47BF-80B3-6169A71351DF'
+ 
+   omaha_channel_type = 'dev' if version.IsDevChannel() else 'stable'
+   vs_configuration_name = 'Debug' if args.debug_build else 'Release'
+diff --git a/src/win32/installer/installer_oss_64bit.wxs b/src/win32/installer/installer_oss_64bit.wxs
+index b3b308e6..694bdddb 100644
+--- a/src/win32/installer/installer_oss_64bit.wxs
++++ b/src/win32/installer/installer_oss_64bit.wxs
+@@ -57,8 +57,8 @@
+     http://msdn.microsoft.com/en-us/library/aa367850.aspx.
+     So we change the product ID for every new version.
+   -->
+-  <Package Name="Mozc" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="Google LLC" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500">
+-    <SummaryInformation Keywords="Installer" Description="Mozc インストーラー" Manufacturer="Google LLC" Codepage="932" />
++  <Package Name="ことのは収集IME" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="KotonohaCollector contributors" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500">
++    <SummaryInformation Keywords="Installer" Description="ことのは収集IME インストーラー" Manufacturer="KotonohaCollector contributors" Codepage="932" />
+ 
+     <!--
+        While obtaining the OS build number from the registry does not seem to be officially
+@@ -101,11 +101,11 @@
+     <Property Id="OS_BUILD_NUMBER" Secure="yes">
+       <RegistrySearch Id="CurrentBuildNumberValue" Type="raw" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" />
+     </Property>
+-    <Launch Condition="(OS_BUILD_NUMBER AND (OS_BUILD_NUMBER &gt;= 17763)) OR (REMOVE=&quot;ALL&quot;)" Message="Mozc をインストールするには Windows 10 1809 以降にアップグレードする必要があります。" />
++    <Launch Condition="(OS_BUILD_NUMBER AND (OS_BUILD_NUMBER &gt;= 17763)) OR (REMOVE=&quot;ALL&quot;)" Message="ことのは収集IMEをインストールするには Windows 10 1809 以降が必要です。" />
+ 
+     <!-- Check if the user have the administrative privileges. -->
+-    <Launch Condition="Privileged" Message="Mozc をインストールするには管理者権限が必要です。" />
+-    <Media Id="1" Cabinet="Mozc.cab" EmbedCab="yes" CompressionLevel="high" />
++    <Launch Condition="Privileged" Message="ことのは収集IMEをインストールするには管理者権限が必要です。" />
++    <Media Id="1" Cabinet="KotonohaCollector.cab" EmbedCab="yes" CompressionLevel="high" />
+ 
+     <?if $(var.MozcTIP64ArmPath) == "" and $(var.MozcTIP64XPath) == "" and $(var.MozcUniversalInstaller) == "" ?>
+       <!--
+@@ -136,10 +136,10 @@
+     </Upgrade>
+ 
+     <UI>
+-      <Error Id="4000" Message="新しいバージョンの Mozc が既にインストールされています。" />
++      <Error Id="4000" Message="新しいバージョンのことのは収集IMEが既にインストールされています。" />
+     </UI>
+ 
+-    <Feature Id="MozcInstall" Title="Mozc" Level="1">
++    <Feature Id="MozcInstall" Title="ことのは収集IME" Level="1">
+       <ComponentRef Id="MozcTIP32" />
+       <ComponentRef Id="MozcTIP64" />
+       <?if $(var.MozcTIP64ArmPath) != "" and $(var.MozcTIP64XPath) != "" ?>
+@@ -241,7 +241,7 @@
+     </InstallExecuteSequence>
+ 
+     <StandardDirectory Id="ProgramFilesFolder">
+-      <Directory Id="MozcDir" Name="Mozc">
++      <Directory Id="MozcDir" Name="KotonohaCollector">
+         <Component Id="MozcConverter">
+           <File Id="mozc_server.exe" Name="mozc_server.exe" DiskId="1" Checksum="yes" Source="$(var.MozcServer64Path)" Vital="yes" />
+         </Component>
+@@ -260,7 +260,7 @@
+             |mozc::kMozcCacheServiceName| defined in base/const.h.
+             TODO(yukawa): Share these parameters. http://b/2357270
+           -->
+-          <ServiceInstall Id="MozcCacheService" Name="MozcCacheService" DisplayName="@[#mozc_cache_service.exe],-100" Description="@[#mozc_cache_service.exe],-101" Type="ownProcess" Start="auto" ErrorControl="normal" />
++          <ServiceInstall Id="MozcCacheService" Name="KotonohaCollectorCacheService" DisplayName="@[#mozc_cache_service.exe],-100" Description="@[#mozc_cache_service.exe],-101" Type="ownProcess" Start="auto" ErrorControl="normal" />
+           <!--
+             The following entry which stops our cache service both on
+             installation and uninstallation should be the first entry in
+@@ -268,7 +268,7 @@
+             recognise that the specified service will be stopped during the
+             instalaltion.  See http://b/2440272 for details.
+           -->
+-          <ServiceControl Id="StopMozcCacheService" Name="MozcCacheService" Stop="both" Remove="uninstall" Wait="yes" />
++          <ServiceControl Id="StopMozcCacheService" Name="KotonohaCollectorCacheService" Stop="both" Remove="uninstall" Wait="yes" />
+         </Component>
+         <Component Id="MozcTIP32" Permanent="no" Bitness="always32">
+           <File Id="mozc_tip32.dll" Name="mozc_tip32.dll" DiskId="1" Checksum="yes" Source="$(var.MozcTIP32Path)" Vital="yes" />
+@@ -379,7 +379,7 @@
+       mozc_renderer.exe automatically after user logon.
+     -->
+     <Component Id="PrelaunchProcesses" Directory="TARGETDIR">
+-      <RegistryValue Id="RunBroker" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Mozc Prelauncher" Action="write" Type="string" Value="&quot;[MozcDir]mozc_broker.exe&quot; --mode=prelaunch_processes" />
++      <RegistryValue Id="RunBroker" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="KotonohaCollector Prelauncher" Action="write" Type="string" Value="&quot;[MozcDir]mozc_broker.exe&quot; --mode=prelaunch_processes" />
+     </Component>
+   </Package>
+ </Wix>
+diff --git a/src/win32/tip/tip_resource.rc b/src/win32/tip/tip_resource.rc
+index ea09b145..f22f322c 100644
+--- a/src/win32/tip/tip_resource.rc
++++ b/src/win32/tip/tip_resource.rc
+@@ -146,7 +146,7 @@ BEGIN
+     IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "Google 日本語入力"
+ #else
+     IDS_IME_DISPLAYNAME     "Mozc"
+-    IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "Mozc"
++    IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "ことのは収集IME"
+ #endif
+     IDS_INPUTMODE           "入力モード"
+     IDS_WIN8_TRAY_ITEM      "右クリックで IME のオプションを表示します"
+@@ -189,7 +189,7 @@ BEGIN
+     IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "Google Japanese Input"
+ #else
+     IDS_IME_DISPLAYNAME     "Mozc"
+-    IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "Mozc"
++    IDS_TEXTSERVICE_DISPLAYNAME_SYNONYM  "Kotonoha Collector IME"
+ #endif
+     IDS_INPUTMODE           "Input Mode"
+     IDS_WIN8_TRAY_ITEM      "Right click to show IME options"
