@@ -1,0 +1,20 @@
+This project bundles the official open-source Mozc Android library and data.
+
+Mozc source: https://github.com/google/mozc
+Pinned revision: 851c3fe33060d2a6090363e4d7ec44fafde2c03d
+Revision date: 2026-08-14
+Android ABIs: arm64-v8a, x86_64
+
+The native library and mozc.data are built from the pinned source without
+source changes by following docs/build_mozc_for_android.md. The Java protobuf
+classes are generated from that revision's protocol/*.proto files with protoc
+29.0 in lite mode. The Android bridge calls Mozc's public SessionHandler JNI
+entry points.
+
+Mozc is distributed under the BSD 3-Clause License. The OSS dictionary has
+additional attribution and license terms. Protocol Buffers Java Lite 4.29.0 is
+also distributed under the BSD 3-Clause License. Complete texts are packaged
+under app/src/main/assets/licenses/ and are included in the APK.
+
+Mozc is not an officially supported Google product. The OSS Mozc dictionary is
+different from the dictionary used by Google Japanese Input and Gboard.

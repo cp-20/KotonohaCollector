@@ -1,0 +1,6 @@
+This project includes vector paths from Google Material Design Icons.
+
+Source: https://github.com/google/material-design-icons
+Style: Material Icons Round, 24 px
+License: Apache License 2.0
+License text: https://www.apache.org/licenses/LICENSE-2.0

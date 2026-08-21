@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">ことのは収集IME</string>
+    <string name="ime_name">ことのは収集IME</string>
+    <string name="ime_subtype">日本語</string>
+    <string name="context_collection_label">前後の文脈も保存する（最大64文字）</string>
+    <string name="test_pad_title">IME テストパッド</string>
+    <plurals name="emoji_count">
+        <item quantity="one">絵文字 %d 個</item>
+        <item quantity="other">絵文字 %d 個</item>
+    </plurals>
+</resources>
