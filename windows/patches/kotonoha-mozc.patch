@@ -393,33 +393,46 @@ index 145ec1aa..bf607bd4 100644
 +#endif  // KOTONOHA_COLLECTOR_BUILD
  }
 diff --git a/src/win32/base/keyevent_handler.cc b/src/win32/base/keyevent_handler.cc
-index 192667cd..8de27c86 100644
+index 192667cd..ea75a2b 100644
 --- a/src/win32/base/keyevent_handler.cc
 +++ b/src/win32/base/keyevent_handler.cc
-@@ -79,7 +79,12 @@ const KeyEvent::SpecialKey kSpecialKeyMap[] = {
-     KeyEvent::NO_SPECIALKEY,  // 0x11: VK_CONTROL
-     KeyEvent::NO_SPECIALKEY,  // 0x12: VK_MENU
-     KeyEvent::NO_SPECIALKEY,  // 0x13: VK_PAUSE
+@@ -434,0 +435,14 @@ bool ConvertToKeyEventMain(const VirtualKey& virtual_key, BYTE scan_code,
 +#ifdef KOTONOHA_COLLECTOR_BUILD
-+    // Use Caps Lock as the familiar Japanese IME on/off toggle.
-+    KeyEvent::HANKAKU,        // 0x14: VK_CAPITAL
-+#else
-     KeyEvent::CAPS_LOCK,      // 0x14: VK_CAPITAL
++  // PowerToys calls VK_CONVERT "IME Convert".  Treat an unmodified press as
++  // the Japanese/half-width alphanumeric toggle while preserving modified
++  // Henkan shortcuts such as Shift+Henkan.
++  if (virtual_key.virtual_key() == VK_CONVERT &&
++      !keyboard_status.IsPressed(VK_SHIFT) &&
++      !keyboard_status.IsPressed(VK_CONTROL) &&
++      !keyboard_status.IsPressed(VK_MENU)) {
++    key->set_special_key(KeyEvent::HANKAKU);
++    modifer_keys->clear();
++    return true;
++  }
 +#endif  // KOTONOHA_COLLECTOR_BUILD
-     KeyEvent::NO_SPECIALKEY,  // 0x15: VK_HANGUL, VK_KANA
-     KeyEvent::ON,             // 0x16: VK_IME_ON
-     KeyEvent::NO_SPECIALKEY,  // 0x17: VK_JUNJA
++
 diff --git a/src/win32/base/keyevent_handler_test.cc b/src/win32/base/keyevent_handler_test.cc
-index d628371c..180791ad 100644
+index d628371c..9a907ae 100644
 --- a/src/win32/base/keyevent_handler_test.cc
 +++ b/src/win32/base/keyevent_handler_test.cc
-@@ -2785,5 +2785,9 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
-     EXPECT_EQ(actual_input.key().modifier_keys_size(), 0);
-     EXPECT_TRUE(actual_input.key().has_special_key());
+@@ -2258,0 +2259,20 @@ TEST_F(KeyEventHandlerTest, Issue3109571ShiftHenkanShouldBeValid) {
 +#ifdef KOTONOHA_COLLECTOR_BUILD
-+    EXPECT_EQ(actual_input.key().special_key(), commands::KeyEvent::HANKAKU);
-+#else
-     EXPECT_EQ(actual_input.key().special_key(), commands::KeyEvent::CAPS_LOCK);
++TEST_F(KeyEventHandlerTest, UnmodifiedImeConvertTogglesInputMode) {
++  KeyboardMock keyboard(false);
++  KeyboardStatus keyboard_status;
++  keyboard_status.SetState(VK_CONVERT, kPressed);
++
++  InputBehavior behavior = {};
++  InputState ime_state = {};
++  ime_state.open = true;
++
++  commands::KeyEvent key;
++  EXPECT_TRUE(TestableKeyEventHandler::ConvertToKeyEvent(
++      VirtualKey::FromVirtualKey(VK_CONVERT), 0, true, false, behavior,
++      ime_state, keyboard_status, &keyboard, &key));
++  EXPECT_TRUE(key.has_special_key());
++  EXPECT_EQ(key.special_key(), commands::KeyEvent::HANKAKU);
++  EXPECT_EQ(key.modifier_keys_size(), 0);
++}
 +#endif  // KOTONOHA_COLLECTOR_BUILD
-   }
- }
++
