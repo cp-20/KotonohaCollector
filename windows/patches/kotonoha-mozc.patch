@@ -393,20 +393,21 @@ index 145ec1aa..bf607bd4 100644
 +#endif  // KOTONOHA_COLLECTOR_BUILD
  }
 diff --git a/src/win32/base/keyevent_handler.cc b/src/win32/base/keyevent_handler.cc
-index 528465c..ea75a2b 100644
+index 528465c..88da667 100644
 --- a/src/win32/base/keyevent_handler.cc
 +++ b/src/win32/base/keyevent_handler.cc
-@@ -435,2 +435,16 @@ bool ConvertToKeyEventMain(const VirtualKey& virtual_key, BYTE scan_code,
+@@ -435,2 +435,17 @@ bool ConvertToKeyEventMain(const VirtualKey& virtual_key, BYTE scan_code,
 -  const KeyEvent::SpecialKey special_key =
 +#ifdef KOTONOHA_COLLECTOR_BUILD
 +  // PowerToys calls VK_CONVERT "IME Convert".  Treat an unmodified press as
 +  // the Japanese/half-width alphanumeric toggle while preserving modified
-+  // Henkan shortcuts such as Shift+Henkan.
++  // Henkan shortcuts such as Shift+Henkan.  Select the target explicitly so
++  // the result does not depend on the active keymap's HANKAKU binding.
 +  if (virtual_key.virtual_key() == VK_CONVERT &&
 +      !keyboard_status.IsPressed(VK_SHIFT) &&
 +      !keyboard_status.IsPressed(VK_CONTROL) &&
 +      !keyboard_status.IsPressed(VK_MENU)) {
-+    key->set_special_key(KeyEvent::HANKAKU);
++    key->set_special_key(ime_state.open ? KeyEvent::OFF : KeyEvent::ON);
 +    modifer_keys->clear();
 +    return true;
 +  }
@@ -415,28 +416,44 @@ index 528465c..ea75a2b 100644
 +  const KeyEvent::SpecialKey special_key =
        kSpecialKeyMap[virtual_key.virtual_key()];
 diff --git a/src/win32/base/keyevent_handler_test.cc b/src/win32/base/keyevent_handler_test.cc
-index 62d03ad..9a907ae 100644
+index 62d03ad..75a6334 100644
 --- a/src/win32/base/keyevent_handler_test.cc
 +++ b/src/win32/base/keyevent_handler_test.cc
-@@ -2259,2 +2259,22 @@ TEST_F(KeyEventHandlerTest, Issue3109571ShiftHenkanShouldBeValid) {
+@@ -2259,2 +2259,38 @@ TEST_F(KeyEventHandlerTest, Issue3109571ShiftHenkanShouldBeValid) {
 -TEST_F(KeyEventHandlerTest, Issue3109571ShiftMuhenkanShouldBeValid) {
 +#ifdef KOTONOHA_COLLECTOR_BUILD
-+TEST_F(KeyEventHandlerTest, UnmodifiedImeConvertTogglesInputMode) {
++TEST_F(KeyEventHandlerTest, UnmodifiedImeConvertTogglesInputModeBothWays) {
 +  KeyboardMock keyboard(false);
 +  KeyboardStatus keyboard_status;
 +  keyboard_status.SetState(VK_CONVERT, kPressed);
 +
 +  InputBehavior behavior = {};
-+  InputState ime_state = {};
-+  ime_state.open = true;
++  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
++  const auto convert = [&](bool ime_open) {
++    InputState ime_state = {};
++    ime_state.logical_conversion_mode =
++        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
++    ime_state.visible_conversion_mode = ime_state.logical_conversion_mode;
++    ime_state.open = ime_open;
 +
-+  commands::KeyEvent key;
-+  EXPECT_TRUE(TestableKeyEventHandler::ConvertToKeyEvent(
-+      VirtualKey::FromVirtualKey(VK_CONVERT), 0, true, false, behavior,
-+      ime_state, keyboard_status, &keyboard, &key));
-+  EXPECT_TRUE(key.has_special_key());
-+  EXPECT_EQ(key.special_key(), commands::KeyEvent::HANKAKU);
-+  EXPECT_EQ(key.modifier_keys_size(), 0);
++    commands::KeyEvent key;
++    const KeyEventHandlerResult result = TestableKeyEventHandler::HandleKey(
++        VirtualKey::FromVirtualKey(VK_CONVERT), 0, true, keyboard_status,
++        behavior, ime_state, &keyboard, &key);
++    EXPECT_TRUE(result.succeeded);
++    EXPECT_TRUE(result.should_be_eaten);
++    EXPECT_TRUE(result.should_be_sent_to_server);
++    EXPECT_EQ(key.modifier_keys_size(), 0);
++    return key;
++  };
++
++  const commands::KeyEvent turn_on_key = convert(false);
++  ASSERT_TRUE(turn_on_key.has_special_key());
++  EXPECT_EQ(turn_on_key.special_key(), commands::KeyEvent::ON);
++
++  const commands::KeyEvent turn_off_key = convert(true);
++  ASSERT_TRUE(turn_off_key.has_special_key());
++  EXPECT_EQ(turn_off_key.special_key(), commands::KeyEvent::OFF);
 +}
 +#endif  // KOTONOHA_COLLECTOR_BUILD
 +
