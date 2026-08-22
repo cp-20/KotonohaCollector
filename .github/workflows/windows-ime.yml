@@ -47,7 +47,7 @@ jobs:
 
       - name: Restore prebuilt Qt cache
         id: qt-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ${{ steps.prepare.outputs.build_directory }}\src\third_party\qt
           key: mozc-qt-${{ runner.os }}-${{ runner.arch }}-851c3fe33060d2a6090363e4d7ec44fafde2c03d-6.9.1-release-v1
@@ -72,6 +72,13 @@ jobs:
               throw "Qt cache/build is incomplete: $requiredFile"
             }
           }
+
+      - name: Save prebuilt Qt cache
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.prepare.outputs.build_directory }}\src\third_party\qt
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
       - name: Run Windows IME unit tests
         shell: pwsh

@@ -393,10 +393,11 @@ index 145ec1aa..bf607bd4 100644
 +#endif  // KOTONOHA_COLLECTOR_BUILD
  }
 diff --git a/src/win32/base/keyevent_handler.cc b/src/win32/base/keyevent_handler.cc
-index 192667cd..ea75a2b 100644
+index 528465c..ea75a2b 100644
 --- a/src/win32/base/keyevent_handler.cc
 +++ b/src/win32/base/keyevent_handler.cc
-@@ -434,0 +435,14 @@ bool ConvertToKeyEventMain(const VirtualKey& virtual_key, BYTE scan_code,
+@@ -435,2 +435,16 @@ bool ConvertToKeyEventMain(const VirtualKey& virtual_key, BYTE scan_code,
+-  const KeyEvent::SpecialKey special_key =
 +#ifdef KOTONOHA_COLLECTOR_BUILD
 +  // PowerToys calls VK_CONVERT "IME Convert".  Treat an unmodified press as
 +  // the Japanese/half-width alphanumeric toggle while preserving modified
@@ -411,11 +412,14 @@ index 192667cd..ea75a2b 100644
 +  }
 +#endif  // KOTONOHA_COLLECTOR_BUILD
 +
++  const KeyEvent::SpecialKey special_key =
+       kSpecialKeyMap[virtual_key.virtual_key()];
 diff --git a/src/win32/base/keyevent_handler_test.cc b/src/win32/base/keyevent_handler_test.cc
-index d628371c..9a907ae 100644
+index 62d03ad..9a907ae 100644
 --- a/src/win32/base/keyevent_handler_test.cc
 +++ b/src/win32/base/keyevent_handler_test.cc
-@@ -2258,0 +2259,20 @@ TEST_F(KeyEventHandlerTest, Issue3109571ShiftHenkanShouldBeValid) {
+@@ -2259,2 +2259,22 @@ TEST_F(KeyEventHandlerTest, Issue3109571ShiftHenkanShouldBeValid) {
+-TEST_F(KeyEventHandlerTest, Issue3109571ShiftMuhenkanShouldBeValid) {
 +#ifdef KOTONOHA_COLLECTOR_BUILD
 +TEST_F(KeyEventHandlerTest, UnmodifiedImeConvertTogglesInputMode) {
 +  KeyboardMock keyboard(false);
@@ -436,3 +440,5 @@ index d628371c..9a907ae 100644
 +}
 +#endif  // KOTONOHA_COLLECTOR_BUILD
 +
++TEST_F(KeyEventHandlerTest, Issue3109571ShiftMuhenkanShouldBeValid) {
+   constexpr bool kKanaLocked = false;
