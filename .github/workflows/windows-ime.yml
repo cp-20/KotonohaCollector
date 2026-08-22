@@ -80,15 +80,30 @@ jobs:
           path: ${{ steps.prepare.outputs.build_directory }}\src\third_party\qt
           key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
-      - name: Run Windows IME unit tests
-        shell: pwsh
-        working-directory: ${{ steps.prepare.outputs.build_directory }}\src
-        run: bazelisk test //kotonoha:event_builder_test //renderer:renderer_style_handler_test //win32/base:keyevent_handler_test --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
+      - name: Configure Bazel caches
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          module-root: ${{ steps.prepare.outputs.build_directory }}\src
+          bazelisk-cache: true
+          disk-cache: windows-ime-${{ runner.os }}-${{ runner.arch }}-release-v1
+          repository-cache: true
+          external-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Build Windows IME package
+      - name: Build Windows IME package and run unit tests
         shell: pwsh
         working-directory: ${{ steps.prepare.outputs.build_directory }}\src
-        run: bazelisk build package --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
+        run: >-
+          bazelisk test
+          //:package
+          //kotonoha:event_builder_test
+          //renderer:renderer_style_handler_test
+          //win32/base:keyevent_handler_test
+          --config release_build
+          --copt=/DKOTONOHA_COLLECTOR_BUILD
+          --copt=/clang:-Wno-nullability-completeness
+          --copt=/clang:-Wno-ignored-attributes
+          --copt=/clang:-Wno-invalid-offsetof
 
       - name: Stage MSI
         shell: pwsh

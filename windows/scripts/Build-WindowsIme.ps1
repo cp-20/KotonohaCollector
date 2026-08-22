@@ -21,10 +21,21 @@ try {
         & python build_tools/build_qt.py --release --confirm_license
         if ($LASTEXITCODE -ne 0) { throw 'Failed to build Qt.' }
     }
-    & bazelisk test //kotonoha:event_builder_test //renderer:renderer_style_handler_test //win32/base:keyevent_handler_test --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
-    if ($LASTEXITCODE -ne 0) { throw 'Windows IME tests failed.' }
-    & bazelisk build package --config release_build --copt=/DKOTONOHA_COLLECTOR_BUILD
-    if ($LASTEXITCODE -ne 0) { throw 'Windows IME build failed.' }
+    $bazelArguments = @(
+        'test'
+        '//:package'
+        '//kotonoha:event_builder_test'
+        '//renderer:renderer_style_handler_test'
+        '//win32/base:keyevent_handler_test'
+        '--config'
+        'release_build'
+        '--copt=/DKOTONOHA_COLLECTOR_BUILD'
+        '--copt=/clang:-Wno-nullability-completeness'
+        '--copt=/clang:-Wno-ignored-attributes'
+        '--copt=/clang:-Wno-invalid-offsetof'
+    )
+    & bazelisk @bazelArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Windows IME build or tests failed.' }
 }
 finally {
     Pop-Location
