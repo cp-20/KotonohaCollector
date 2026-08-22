@@ -459,3 +459,29 @@ index 62d03ad..75a6334 100644
 +
 +TEST_F(KeyEventHandlerTest, Issue3109571ShiftMuhenkanShouldBeValid) {
    constexpr bool kKanaLocked = false;
+diff --git a/src/win32/tip/tip_lang_bar_menu.cc b/src/win32/tip/tip_lang_bar_menu.cc
+index 355f987..a05fba0 100644
+--- a/src/win32/tip/tip_lang_bar_menu.cc
++++ b/src/win32/tip/tip_lang_bar_menu.cc
+@@ -72,5 +72,11 @@ constexpr int kTipLangBarMenuCookie =
+     (('M' << 24) | ('o' << 16) | ('z' << 8) | ('c' << 0));
+-
+-constexpr char kTextIconFont[] = "ＭＳ ゴシック";
+-
++
++#ifdef KOTONOHA_COLLECTOR_BUILD
++// Match the modern Windows Japanese UI instead of the legacy bitmap-style
++// MS Gothic glyphs used by upstream Mozc.
++constexpr char kTextIconFont[] = "Yu Gothic UI";
++#else
++constexpr char kTextIconFont[] = "ＭＳ ゴシック";
++#endif  // KOTONOHA_COLLECTOR_BUILD
++
+ // TODO(yukawa): Refactor LangBar code so that we can configure following
+@@ -99,4 +105,4 @@ HICON LoadIconFromResource(HINSTANCE instance, UINT icon_id) {
+   const auto icon_size = ::GetSystemMetrics(SM_CYSMICON);
+-
+-  // Replace some text icons with on-the-fly image drawn with MS-Gothic.
++
++  // Replace some text icons with an on-the-fly image drawn with the UI font.
+   const auto& icon_text = GetIconStringIfNecessary(icon_id);
