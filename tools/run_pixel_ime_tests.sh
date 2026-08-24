@@ -8,6 +8,7 @@ TEST_ACTIVITY="$PACKAGE/.TestPadActivity"
 REMOTE_XML="/sdcard/kotonoha-ime-test.xml"
 TEST_PREPARE_TELEMETRY="$PACKAGE.TEST_PREPARE_TELEMETRY"
 TEST_EXPORT_TELEMETRY="$PACKAGE.TEST_EXPORT_TELEMETRY"
+TEST_SET_SELECTION="$PACKAGE.TEST_SET_SELECTION"
 TELEMETRY_EXPORT="cache/kotonoha-telemetry-test.jsonl"
 TELEMETRY_STATUS="cache/kotonoha-telemetry-status.txt"
 
@@ -24,6 +25,18 @@ editor_text() {
   adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
     | tr -d '\r' \
     | perl -0777 -ne 'if (/content-desc="test-editor:([^"]*)"/) { print $1; }'
+}
+
+ime_cursor_position() {
+  adb_run shell dumpsys input_method 2>/dev/null \
+    | tr -d '\r' \
+    | perl -ne '$position = $1 if /mCursorSelStart=(\d+)/; END { print $position; }'
+}
+
+ime_editor_has_focus() {
+  adb_run shell dumpsys input_method 2>/dev/null \
+    | tr -d '\r' \
+    | perl -ne '$found = 1 if /mServedView=android\.widget\.EditText/; END { exit($found ? 0 : 1); }'
 }
 
 wait_for_text() {
@@ -142,6 +155,21 @@ flick_key() {
   adb_run shell input swipe "$1" "$2" "$3" "$4" 160
 }
 
+flick_hold_key() {
+  adb_run shell input motionevent DOWN "$1" "$2"
+  adb_run shell input motionevent MOVE "$3" "$4"
+  sleep 0.9
+  adb_run shell input motionevent UP "$3" "$4"
+  sleep 0.2
+}
+
+hold_key() {
+  adb_run shell input motionevent DOWN "$1" "$2"
+  sleep 0.9
+  adb_run shell input motionevent UP "$1" "$2"
+  sleep 0.2
+}
+
 type_kyou() {
   flick_key 540 1810 450 1810
   flick_key 540 2074 540 2155
@@ -152,6 +180,17 @@ type_kyou() {
 type_ashita() {
   tap_key 324 1810
   flick_key 756 1810 666 1810
+  tap_key 324 1942
+}
+
+type_daigakukita() {
+  tap_key 324 1942
+  tap_key 324 2208
+  flick_key 324 1810 245 1810
+  tap_key 540 1810
+  tap_key 324 2208
+  flick_key 540 1810 540 1720
+  flick_key 540 1810 450 1810
   tap_key 324 1942
 }
 
@@ -230,6 +269,15 @@ test_committed_delete_and_undo() {
   assert_text "undo restores deleted character" "abc"
 }
 
+test_undo_is_invalidated_after_cursor_move() {
+  fresh_pad "abc"
+  tap_key 972 1810
+  assert_text "delete before moving away from undo anchor" "ab"
+  tap_key 108 1942
+  tap_key 108 1810
+  assert_text "undo does not restore at a different cursor" "ab"
+}
+
 test_cursor_delete() {
   fresh_pad "abc"
   tap_key 108 1942
@@ -269,6 +317,143 @@ test_accelerated_long_press_delete() {
   fi
 }
 
+test_cursor_flick_hold_repeat() {
+  local initial_text before after
+  initial_text="$(seq -w 0 29 | sed 's/^/000/' | cut -c1-5)"
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 179 179
+  before="$(ime_cursor_position)"
+  flick_hold_key 108 1942 108 1842
+  after="$(ime_cursor_position)"
+  if [[ "$before" == "179" && "$after" =~ ^[0-9]+$ \
+      && "$after" -gt 0 && "$after" -le 161 ]]; then
+    pass_case "up flick then hold repeats cursor movement"
+  else
+    fail_case "up flick then hold repeats cursor movement" \
+      "before=[$before] after=[$after]"
+  fi
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 30 30
+  before="$(ime_cursor_position)"
+  flick_hold_key 972 1942 972 2042
+  after="$(ime_cursor_position)"
+  if [[ "$before" == "30" && "$after" =~ ^[0-9]+$ \
+      && "$after" -ge 48 && "$after" -lt 179 ]]; then
+    pass_case "down flick then hold repeats cursor movement"
+  else
+    fail_case "down flick then hold repeats cursor movement" \
+      "before=[$before] after=[$after]"
+  fi
+}
+
+test_cursor_hold_stops_at_editor_boundaries() {
+  local initial_text before after
+  initial_text=$'11111\n22222\n33333\n44444\n55555'
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 29 29
+  before="$(ime_cursor_position)"
+  flick_hold_key 108 1942 108 1842
+  after="$(ime_cursor_position)"
+  if [[ "$before" == "29" && "$after" == "0" ]] && ime_editor_has_focus; then
+    pass_case "up flick then hold stops inside the editor"
+  else
+    fail_case "up flick then hold stops inside the editor" \
+      "before=[$before] after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 0 0
+  before="$(ime_cursor_position)"
+  flick_hold_key 972 1942 972 2042
+  after="$(ime_cursor_position)"
+  if [[ "$before" == "0" && "$after" == "29" ]] && ime_editor_has_focus; then
+    pass_case "down flick then hold stops inside the editor"
+  else
+    fail_case "down flick then hold stops inside the editor" \
+      "before=[$before] after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 0 0
+  hold_key 108 1942
+  after="$(ime_cursor_position)"
+  if [[ "$after" == "0" ]] && ime_editor_has_focus; then
+    pass_case "left hold stops at document start"
+  else
+    fail_case "left hold stops at document start" \
+      "after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "$initial_text" "$TEST_SET_SELECTION" 29 29
+  hold_key 972 1942
+  after="$(ime_cursor_position)"
+  if [[ "$after" == "29" ]] && ime_editor_has_focus; then
+    pass_case "right hold stops at document end"
+  else
+    fail_case "right hold stops at document end" \
+      "after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+}
+
+test_cursor_gesture_edge_cases() {
+  local wrapped_text after actual
+
+  fresh_pad "" "$TEST_SET_SELECTION" 0 0
+  hold_key 108 1942
+  hold_key 972 1942
+  flick_hold_key 108 1942 108 1842
+  flick_hold_key 972 1942 972 2042
+  after="$(ime_cursor_position)"
+  if [[ "$after" == "0" ]] && ime_editor_has_focus; then
+    pass_case "all held cursor directions stay in an empty editor"
+  else
+    fail_case "all held cursor directions stay in an empty editor" \
+      "after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  printf -v wrapped_text '%*s' 240 ''
+  wrapped_text="${wrapped_text// /x}"
+  fresh_pad "$wrapped_text" "$TEST_SET_SELECTION" 240 240
+  flick_hold_key 108 1942 108 1842
+  after="$(ime_cursor_position)"
+  if [[ "$after" == "0" ]] && ime_editor_has_focus; then
+    pass_case "up flick then hold stops in wrapped text"
+  else
+    fail_case "up flick then hold stops in wrapped text" \
+      "after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "$wrapped_text" "$TEST_SET_SELECTION" 0 0
+  flick_hold_key 972 1942 972 2042
+  after="$(ime_cursor_position)"
+  if [[ "$after" == "240" ]] && ime_editor_has_focus; then
+    pass_case "down flick then hold stops in wrapped text"
+  else
+    fail_case "down flick then hold stops in wrapped text" \
+      "after=[$after] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "abc" "$TEST_SET_SELECTION" 0 0
+  flick_key 972 2074 790 2074
+  after="$(ime_cursor_position)"
+  actual="$(editor_text)"
+  if [[ "$after" == "0" && "$actual" == "abc" ]] && ime_editor_has_focus; then
+    pass_case "space swipe left stays at document start without inserting"
+  else
+    fail_case "space swipe left stays at document start without inserting" \
+      "after=[$after] text=[$actual] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+
+  fresh_pad "abc" "$TEST_SET_SELECTION" 3 3
+  flick_key 972 2074 1050 2074
+  after="$(ime_cursor_position)"
+  actual="$(editor_text)"
+  if [[ "$after" == "3" && "$actual" == "abc" ]] && ime_editor_has_focus; then
+    pass_case "space swipe right stays at document end without inserting"
+  else
+    fail_case "space swipe right stays at document end without inserting" \
+      "after=[$after] text=[$actual] editor_focus=$(ime_editor_has_focus && printf yes || printf no)"
+  fi
+}
+
 test_japanese_space() {
   fresh_pad
   tap_key 972 2074
@@ -287,6 +472,18 @@ test_mozc_candidates_after_different_commit() {
   assert_text "different reading follows candidate-strip commit" "今日あした"
   tap_key 972 2074
   assert_text "Mozc converts the new reading instead of the stale one" "今日明日"
+}
+
+test_partial_conversion_keeps_suffix() {
+  fresh_pad
+  type_daigakukita
+  assert_text "reading before partial conversion" "だいがくきた"
+  tap_key 972 2074
+  assert_text "partial candidate keeps unread suffix visible" "大学きた"
+  tap_key 90 1685
+  assert_text "partial candidate commits only its consumed reading" "大学きた"
+  flick_key 972 1810 850 1810
+  assert_text "word delete removes the remaining composition only" "大学"
 }
 
 test_emoji_cluster_delete() {
@@ -404,6 +601,7 @@ case "${1:-smoke}" in
     # Only behavior that crosses an Android framework or Mozc JNI boundary.
     test_raw_delete
     test_conversion_display_and_cycle
+    test_partial_conversion_keeps_suffix
     test_mozc_candidates_after_different_commit
     test_accelerated_long_press_delete
     test_japanese_space
@@ -414,6 +612,11 @@ case "${1:-smoke}" in
     test_word_swipe_delete
     test_long_press_delete
     test_accelerated_long_press_delete
+    ;;
+  cursor_gestures)
+    test_cursor_flick_hold_repeat
+    test_cursor_hold_stops_at_editor_boundaries
+    test_cursor_gesture_edge_cases
     ;;
   selection_delete)
     test_selection_and_start_delete
@@ -427,6 +630,9 @@ case "${1:-smoke}" in
   stale_reading)
     test_mozc_candidates_after_different_commit
     ;;
+  partial_conversion)
+    test_partial_conversion_keeps_suffix
+    ;;
   telemetry)
     test_telemetry_schema_v3
     ;;
@@ -435,14 +641,19 @@ case "${1:-smoke}" in
     test_modifier_delete
     test_conversion_display_and_cycle
     test_conversion_auto_commit
+    test_partial_conversion_keeps_suffix
     test_mozc_candidates_after_different_commit
     test_delete_during_conversion
     test_committed_delete_and_undo
+    test_undo_is_invalidated_after_cursor_move
     test_cursor_delete
     test_selection_and_start_delete
     test_word_swipe_delete
     test_long_press_delete
     test_accelerated_long_press_delete
+    test_cursor_flick_hold_repeat
+    test_cursor_hold_stops_at_editor_boundaries
+    test_cursor_gesture_edge_cases
     test_emoji_cluster_delete
     test_punctuation_commit
     test_japanese_space
@@ -450,7 +661,7 @@ case "${1:-smoke}" in
     test_telemetry_schema_v3
     ;;
   *)
-    printf 'Unknown group: %s (use smoke, all, telemetry, stale_reading, v012, delete_gestures, or selection_delete)\n' "$1" >&2
+    printf 'Unknown group: %s (use smoke, all, telemetry, stale_reading, partial_conversion, v012, delete_gestures, cursor_gestures, or selection_delete)\n' "$1" >&2
     exit 2
 esac
 

@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.util.Base64
+import dev.kotonoha.collector.ui.GboardPalette
 
 import java.nio.charset.StandardCharsets
 

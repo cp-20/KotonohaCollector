@@ -2,9 +2,9 @@
 
 原則は「Androidを必要としない判定を、端末テストへ持ち込まない」です。日常の変更ではホスト単体テストを実行し、IME・InputConnection・Mozc JNIという代替できない境界だけを小さなPixelスモークテストで確認します。
 
-## 1. ホスト単体テスト（既定・27件）
+## 1. ホスト単体テスト（既定・38件）
 
-エミュレータ不要のJUnitです。候補状態遷移、ローマ字変換、濁点／小書き、Unicode削除境界、語削除判定、削除リピート速度、全角空白、角丸上限、フォールバック変換、クリップボード履歴、プライバシー判定、パッケージID、Unicode絵文字カタログ解析、schema v3のキーと型を対象にします。
+エミュレータ不要のJUnitです。パッケージ依存方向、Composition状態遷移、Editor確定拒否・suffix fallback、訂正系列、Undo位置アンカー、候補状態遷移、ローマ字変換、濁点／小書き、Unicode削除境界、語削除判定、削除／カーソルリピート速度、全角空白、角丸上限、フォールバック変換、プロセス内クリップボード履歴、プライバシー判定、パッケージID、Unicode絵文字カタログ解析、schema v3のキーと型を対象にします。
 
 ```bash
 ./gradlew testDebugUnitTest
@@ -20,10 +20,11 @@ Robolectricは現在使いません。Android APIを模倣する層を増やす�
 
 ## 2. Pixelスモーク（既定・必要最小限）
 
-次の7シナリオだけを、1080×2424の `Pixel_10a_API_36` でADB実行します。
+次の8シナリオだけを、1080×2424の `Pixel_10a_API_36` でADB実行します。
 
 - フリック入力→未確定文字→1文字削除が実InputConnectionで同期する
 - Mozc JNIが初期化され、変換キーで候補が切り替わる
+- 部分候補「大学」の確定後も、未消費の読み「きた」が未確定のまま残る
 - 候補バーで「今日」を確定後、「あした」が古い読みを使わず「明日」へ変換される
 - 削除キー900ms長押しが実タッチ経路で加速する
 - かな面の空白がU+3000になる
@@ -45,7 +46,7 @@ ADB_BIN=/path/to/adb tools/run_pixel_ime_tests.sh smoke
 ADB_BIN=/path/to/adb tools/run_pixel_ime_tests.sh all
 ```
 
-絞り込みグループは `telemetry`、`stale_reading`、`v012`、`delete_gestures`、`selection_delete` です。
+絞り込みグループは `telemetry`、`stale_reading`、`partial_conversion`、`v012`、`delete_gestures`、`cursor_gestures`、`selection_delete` です。`cursor_gestures` は左右カーソルキーを上下へフリックしたまま保持して選択方向へ複数回移動すること、上下左右の文書端へ到達しても編集欄からフォーカスが出ないこと、空文字・折り返し長文・スペーススワイプの境界を実タッチ経路で検証します。
 
 ## 境界ごとの役割
 
@@ -62,4 +63,4 @@ ADB_BIN=/path/to/adb tools/run_pixel_ime_tests.sh all
 | 実座標のフリック／長押し | 不可 | 代表経路 | リリース前 |
 | 見た目・アニメーション | 不可 | 不要 | スクリーンショット／手動確認 |
 
-これにより通常の変更は27件のホストテストだけで完結し、Android起動が必要なのはIMEフレームワーク、Mozc JNI、Keystore／SQLite／JSONL境界へ触れた変更とリリース候補だけです。「つ → っ → づ」の循環順と全角句読点の未確定方針は純粋Kotlinの単体テストでも確認するため、専用のエミュレータケースを増やしていません。
+これにより通常の変更は38件のホストテストだけで完結し、Android起動が必要なのはIMEフレームワーク、Mozc JNI、Keystore／SQLite／JSONL境界へ触れた変更とリリース候補だけです。「つ → っ → づ」の循環順と全角句読点の未確定方針は純粋Kotlinの単体テストでも確認するため、専用のエミュレータケースを増やしていません。

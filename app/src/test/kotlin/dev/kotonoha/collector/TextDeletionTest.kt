@@ -1,5 +1,6 @@
 package dev.kotonoha.collector
 
+import dev.kotonoha.collector.input.TextDeletion
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

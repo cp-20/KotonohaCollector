@@ -2,6 +2,10 @@ package dev.kotonoha.collector
 
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import dev.kotonoha.collector.clipboard.TransientClipboardHistory
+import dev.kotonoha.collector.conversion.FallbackConversionEngine
+import dev.kotonoha.collector.telemetry.PrivacyGuard
+import dev.kotonoha.collector.ui.DeleteGesturePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -26,8 +30,8 @@ class CoreComponentsTest {
     }
 
     @Test
-    fun clipboardHistoryIsBoundedDeduplicatedAndSessionOnly() {
-        val history = ClipboardHistory()
+    fun transientClipboardHistoryIsBoundedDeduplicatedAndProcessLocal() {
+        val history = TransientClipboardHistory()
         history.remember("alpha")
         history.remember("beta")
         history.remember("alpha")

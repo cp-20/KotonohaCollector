@@ -1,5 +1,9 @@
 package dev.kotonoha.collector
 
+import dev.kotonoha.collector.input.JapaneseInputPolicy
+import dev.kotonoha.collector.ui.CursorRepeatPolicy
+import dev.kotonoha.collector.ui.DeleteRepeatPolicy
+import dev.kotonoha.collector.ui.KeyboardShapePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -30,6 +34,12 @@ class InputPoliciesTest {
         assertTrue(DeleteRepeatPolicy.shouldHaptic(1))
         assertTrue(DeleteRepeatPolicy.shouldHaptic(4))
         assertFalse(DeleteRepeatPolicy.shouldHaptic(5))
+    }
+
+    @Test
+    fun cursorRepeatUsesThePlatformLongPressDelay() {
+        assertEquals(500L, CursorRepeatPolicy.initialDelayMs(500))
+        assertEquals(50L, CursorRepeatPolicy.intervalMs())
     }
 
     @Test

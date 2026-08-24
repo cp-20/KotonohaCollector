@@ -16,6 +16,9 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import dev.kotonoha.collector.telemetry.EventStore
+import dev.kotonoha.collector.telemetry.ImePreferences
+import dev.kotonoha.collector.ui.GboardPalette
 
 import java.io.OutputStream
 import java.text.SimpleDateFormat

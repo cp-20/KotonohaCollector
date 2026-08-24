@@ -1,5 +1,6 @@
 package dev.kotonoha.collector
 
+import dev.kotonoha.collector.ui.EmojiCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test

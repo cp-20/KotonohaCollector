@@ -1,5 +1,7 @@
 package dev.kotonoha.collector
 
+import dev.kotonoha.collector.input.FlickGesture
+import dev.kotonoha.collector.telemetry.CollectionEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

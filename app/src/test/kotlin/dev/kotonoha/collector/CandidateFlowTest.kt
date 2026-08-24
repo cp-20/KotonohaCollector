@@ -1,5 +1,6 @@
 package dev.kotonoha.collector
 
+import dev.kotonoha.collector.input.CandidateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
