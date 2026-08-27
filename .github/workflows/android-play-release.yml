@@ -98,7 +98,8 @@ jobs:
             notes="ことのは収集IME ${VERSION_NAME}"
           fi
           mkdir -p "${RUNNER_TEMP}/whatsnew"
-          NOTES="${notes}" perl -CSD -e 'print substr($ENV{NOTES}, 0, 500), "\n"' \
+          printf '%s\n' "${notes}" \
+            | python3 -c 'import sys; print(sys.stdin.read()[:500], end="")' \
             > "${RUNNER_TEMP}/whatsnew/whatsnew-ja-JP"
 
       - name: Release to Google Play internal testing
