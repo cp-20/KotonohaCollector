@@ -19,7 +19,7 @@
 
 ## ビルド
 
-JDK 17とAndroid SDK 34を用意し、Android Studioで開くか次を実行します。
+JDK 17とAndroid SDK 36を用意し、Android Studioで開くか次を実行します。
 
 ```bash
 ./gradlew assembleDebug
@@ -37,6 +37,24 @@ APKは `app/build/outputs/apk/debug/app-debug.apk` に生成されます。Mozc�
 ## テスト
 
 エミュレータ不要の単体テストと、Pixelエミュレータを使うIME境界テストがあります。ケースと実行方法は [TESTING.md](TESTING.md) を参照してください。
+
+## Play Storeへのリリース
+
+`app/build.gradle` の `versionCode` と `versionName` を更新し、versionNameと同じ注釈付きタグをpushすると、GitHub Actionsがテスト、AABの署名、署名検証、Google Play内部テストへの公開を行います。タグのメッセージが日本語のリリースノートになります。
+
+```bash
+git tag -a v0.16.1 -m "Pixel 10aなどでキーボードが画面下部のシステム領域と重なる問題を修正しました。"
+git push origin main v0.16.1
+```
+
+リポジトリには次のGitHub Actions Secretsが必要です。
+
+- `ANDROID_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_UPLOAD_STORE_PASSWORD`
+- `ANDROID_UPLOAD_KEY_PASSWORD`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+
+Play Developer API用サービスアカウントには、Play Consoleでこのアプリを内部テストへリリースできる権限だけを付与します。製品版へのアクセス取得後は、`android-play-release.yml` の `tracks` を `production` に変更することで同じフローを製品版に利用できます。
 
 ## Mozcと第三者ライセンス
 

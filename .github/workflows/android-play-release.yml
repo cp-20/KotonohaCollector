@@ -1,0 +1,113 @@
+name: android-play-release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-play-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Verify tag and app version
+        id: version
+        shell: bash
+        run: |
+          version_name="$(sed -nE "s/^[[:space:]]*versionName '([^']+)'.*/\1/p" app/build.gradle)"
+          version_code="$(sed -nE 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' app/build.gradle)"
+          if [[ "${GITHUB_REF_NAME}" != "v${version_name}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match app version v${version_name}." >&2
+            exit 1
+          fi
+          echo "version_name=${version_name}" >> "${GITHUB_OUTPUT}"
+          echo "version_code=${version_code}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check release secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          for value in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_PASSWORD PLAY_SERVICE_ACCOUNT; do
+            if [[ -z "${!value}" ]]; then
+              echo "Required release secret ${value} is not configured." >&2
+              exit 1
+            fi
+          done
+
+      - name: Test and build release bundle
+        run: ./gradlew testDebugUnitTest bundleRelease --no-daemon
+
+      - name: Sign and verify app bundle
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        shell: bash
+        run: |
+          keystore_path="${RUNNER_TEMP}/kotonoha-upload.jks"
+          signed_bundle="app/build/outputs/bundle/release/kotonoha-${VERSION_NAME}-release.aab"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          chmod 600 "${keystore_path}"
+          cp app/build/outputs/bundle/release/app-release.aab "${signed_bundle}"
+          jarsigner \
+            -keystore "${keystore_path}" \
+            -storepass:env ANDROID_UPLOAD_STORE_PASSWORD \
+            -keypass:env ANDROID_UPLOAD_KEY_PASSWORD \
+            -sigalg SHA384withRSA \
+            -digestalg SHA-384 \
+            "${signed_bundle}" \
+            kotonoha-upload
+          jarsigner -verify "${signed_bundle}"
+          keytool -printcert -jarfile "${signed_bundle}" \
+            | grep -F "F9:49:BE:3C:A5:04:EC:76:DD:D2:B6:34:3E:86:B7:C6:30:61:C8:D3:C7:B0:65:CD:7E:1C:CC:B3:B8:F0:67:42"
+
+      - name: Prepare release notes from tag
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        shell: bash
+        run: |
+          notes="$(git for-each-ref --format='%(contents)' "refs/tags/${GITHUB_REF_NAME}")"
+          if [[ -z "${notes//[[:space:]]/}" ]]; then
+            notes="ことのは収集IME ${VERSION_NAME}"
+          fi
+          mkdir -p "${RUNNER_TEMP}/whatsnew"
+          NOTES="${notes}" perl -CSD -e 'print substr($ENV{NOTES}, 0, 500), "\n"' \
+            > "${RUNNER_TEMP}/whatsnew/whatsnew-ja-JP"
+
+      - name: Release to Google Play internal testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.cp20.kotonoha
+          releaseFiles: app/build/outputs/bundle/release/kotonoha-${{ steps.version.outputs.version_name }}-release.aab
+          tracks: internal
+          status: completed
+          releaseName: ${{ github.ref_name }}
+          whatsNewDirectory: ${{ runner.temp }}/whatsnew

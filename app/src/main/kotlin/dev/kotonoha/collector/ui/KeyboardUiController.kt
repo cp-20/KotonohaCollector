@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.os.Build
 import android.os.SystemClock
 import android.text.Spannable
 import android.text.SpannableString
@@ -15,6 +16,7 @@ import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -96,7 +98,17 @@ get() = keyboardMode.name
 fun createInputView():View {
 val root = LinearLayout(this)
 root.orientation = LinearLayout.VERTICAL
-root.setPadding(0, 0, 0, dp(14))
+val contentBottomPadding = dp(14)
+root.setPadding(0, 0, 0, contentBottomPadding)
+root.setOnApplyWindowInsetsListener { view, insets ->
+view.setPadding(
+view.paddingLeft,
+view.paddingTop,
+view.paddingRight,
+contentBottomPadding + systemBarBottomInset(insets),
+)
+insets
+}
 root.setBackgroundColor(palette.background)
 
 root.addView(createToolbar(), LinearLayout.LayoutParams(
@@ -111,6 +123,15 @@ LinearLayout.LayoutParams.MATCH_PARENT, dp(PANEL_HEIGHT_DP)))
 renderPanel()
 refreshCandidateViews()
 return root
+}
+
+@Suppress("DEPRECATION")
+private fun systemBarBottomInset(insets:WindowInsets):Int {
+// Android can expose the IME navigation strip as a caption bar, so include all system bars.
+return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+insets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).bottom
+else
+insets.stableInsetBottom
 }
 
 fun startInput() {

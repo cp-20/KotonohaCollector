@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace 'dev.kotonoha.collector'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
-        applicationId 'dev.kotonoha.collector'
+        applicationId 'dev.cp20.kotonoha'
         minSdk 26
-        targetSdk 34
-        versionCode 16
-        versionName '0.16.0'
+        targetSdk 36
+        versionCode 17
+        versionName '0.16.1'
     }
 
     buildTypes {
