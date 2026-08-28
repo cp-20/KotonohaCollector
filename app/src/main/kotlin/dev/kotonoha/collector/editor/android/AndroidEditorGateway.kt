@@ -34,6 +34,10 @@ internal class AndroidEditorGateway(
                 CompositionCommitOutcome(true, RemainingTextOutcome.NONE)
             } else if (
                 remainingStyledText != null &&
+                // Some editors retain SPAN_COMPOSING on styling spans from the replaced preedit.
+                // Close the committed prefix before opening the unread suffix, otherwise the
+                // editor can report (and later delete) prefix + suffix as one composition.
+                runCatching { connection.finishComposingText() }.getOrDefault(false) &&
                 runCatching {
                     connection.setComposingText(remainingStyledText, 1)
                 }.getOrDefault(false)
