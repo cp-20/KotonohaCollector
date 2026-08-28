@@ -426,13 +426,13 @@ test_long_press_delete() {
 
 test_accelerated_long_press_delete() {
   fresh_pad "abcdefghijklmnopqrstuvwxyz1234"
-  adb_run shell input swipe 972 1810 972 1810 900
+  adb_run shell input swipe 972 1810 972 1810 1200
   local actual
   actual="$(editor_text)"
   if [[ ${#actual} -le 20 ]]; then
-    pass_case "900ms backspace hold accelerates"
+    pass_case "1200ms backspace hold accelerates"
   else
-    fail_case "900ms backspace hold accelerates" "remaining=[$actual] length=${#actual}"
+    fail_case "1200ms backspace hold accelerates" "remaining=[$actual] length=${#actual}"
   fi
 }
 

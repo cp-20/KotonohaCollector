@@ -28,16 +28,23 @@ internal class AndroidEditorGateway(
             ?: return CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
         runCatching { connection.beginBatchEdit() }
         return try {
-            if (!runCatching { connection.commitText(committedText, 1) }.getOrDefault(false)) {
+            val committed = if (remainingPlainText.isEmpty()) {
+                runCatching { connection.commitText(committedText, 1) }.getOrDefault(false)
+            } else {
+                // Replacing a styled preedit via commitText can leave old SPAN_COMPOSING flags
+                // attached to the committed prefix in EditText. Replace it as composition first,
+                // then close that composition so the suffix starts with a clean span boundary.
+                runCatching {
+                    connection.setComposingText(committedText, 1) &&
+                        connection.finishComposingText()
+                }.getOrDefault(false)
+            }
+            if (!committed) {
                 CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
             } else if (remainingPlainText.isEmpty()) {
                 CompositionCommitOutcome(true, RemainingTextOutcome.NONE)
             } else if (
                 remainingStyledText != null &&
-                // Some editors retain SPAN_COMPOSING on styling spans from the replaced preedit.
-                // Close the committed prefix before opening the unread suffix, otherwise the
-                // editor can report (and later delete) prefix + suffix as one composition.
-                runCatching { connection.finishComposingText() }.getOrDefault(false) &&
                 runCatching {
                     connection.setComposingText(remainingStyledText, 1)
                 }.getOrDefault(false)
