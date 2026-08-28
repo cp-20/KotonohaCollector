@@ -1,0 +1,132 @@
+name: android-ime
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-group:
+        description: Pixel regression group
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - all
+  schedule:
+    - cron: "17 18 * * *"
+  push:
+    paths:
+      - ".github/workflows/android-ime.yml"
+      - "app/**"
+      - "tools/run_pixel_ime_tests.sh"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "TESTING.md"
+  pull_request:
+    paths:
+      - ".github/workflows/android-ime.yml"
+      - "app/**"
+      - "tools/run_pixel_ime_tests.sh"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "TESTING.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Run composition invariants and host tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+  pixel-regression:
+    needs: host-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TEST_GROUP: ${{ github.event_name == 'schedule' && 'all' || inputs['test-group'] || 'smoke' }}
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Enable KVM
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run API 36 Pixel IME regression
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # pinned v2 tag
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+            -camera-back none
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: |
+            set -euxo pipefail
+            artifact_dir="${RUNNER_TEMP}/android-ime-artifacts"
+            mkdir -p "${artifact_dir}"
+            collect_diagnostics() {
+              adb logcat -d > "${artifact_dir}/logcat.txt" 2>&1 || true
+              adb shell dumpsys input_method > "${artifact_dir}/input-method.txt" 2>&1 || true
+              adb exec-out cat /sdcard/kotonoha-ime-test.xml \
+                > "${artifact_dir}/ui.xml" 2>/dev/null || true
+            }
+            trap collect_diagnostics EXIT
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell wm size 1080x2424
+            adb shell wm density 420
+            tools/run_pixel_ime_tests.sh "${TEST_GROUP}"
+
+      - name: Upload emulator diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: android-ime-diagnostics
+          path: ${{ runner.temp }}/android-ime-artifacts
+          if-no-files-found: warn

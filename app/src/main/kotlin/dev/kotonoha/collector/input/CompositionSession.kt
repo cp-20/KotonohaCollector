@@ -12,19 +12,6 @@ internal class CompositionSession(
     private val conversionEngine: ConversionEngine,
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
-    data class CommitSnapshot(
-        val text: String,
-        val raw: String,
-        val reading: String,
-        val candidates: List<String>,
-        val selectedIndex: Int,
-        val compositionId: String,
-        val candidateSource: String,
-        val consumedReading: String,
-        val remainingRaw: String,
-        val remainingReading: String,
-    )
-
     private val rawBuffer = StringBuilder()
     private val candidateBuffer = mutableListOf<String>()
 
@@ -133,22 +120,42 @@ internal class CompositionSession(
     }
 
     /** Creates a commit plan without changing selection or composition state. */
-    fun planCandidateCommit(index: Int): CommitSnapshot? {
+    fun planCandidateCommit(index: Int): CompositionCommitPlan? {
         val text = candidateBuffer.getOrNull(index) ?: return null
-        return snapshot(text, index)
+        return partialPlan(text, index)
     }
 
-    fun planCurrentCommit(): CommitSnapshot? {
-        if (requiresCommitBeforeInput()) {
-            return planCandidateCommit(selectedCandidateIndex)
-        }
-        if (rawBuffer.isEmpty()) return null
-        return snapshot(reading, -1)
+    /**
+     * Creates one commit for everything currently shown in the composing range.
+     *
+     * A partial Mozc candidate normally leaves its unread suffix composing.  Actions such as
+     * Enter and keyboard-mode changes instead promise to finish the whole composition, so they
+     * must not expose that intermediate suffix to the editor as a new composing range.
+     */
+    fun planFullCurrentCommit(): CompositionCommitPlan? {
+        val partial = when {
+            requiresCommitBeforeInput() -> planCandidateCommit(selectedCandidateIndex)
+            rawBuffer.isNotEmpty() -> partialPlan(reading, -1)
+            else -> null
+        } ?: return null
+        return CompositionCommitPlan(
+            intent = CompositionCommitIntent.FULL,
+            text = partial.text + partial.remainingReading,
+            raw = partial.raw,
+            reading = partial.reading,
+            candidates = partial.candidates,
+            selectedIndex = partial.selectedIndex,
+            compositionId = partial.compositionId,
+            candidateSource = partial.candidateSource,
+            consumedReading = partial.reading,
+            remainingRaw = "",
+            remainingReading = "",
+        )
     }
 
-    /** Call only after the editor accepted the text from [CommitSnapshot]. */
+    /** Call only after the editor accepted the text from [CompositionCommitPlan]. */
     fun completeCommit(
-        commit: CommitSnapshot,
+        commit: CompositionCommitPlan,
         contextBefore: String = "",
         preserveRemainingComposition: Boolean = true,
     ) {
@@ -188,7 +195,7 @@ internal class CompositionSession(
         selectedCandidateIndex = -1
     }
 
-    private fun snapshot(text: String, selectedIndex: Int): CommitSnapshot {
+    private fun partialPlan(text: String, selectedIndex: Int): CompositionCommitPlan {
         val originalRaw = raw
         val originalReading = reading
         val (remainingRaw, remainingReading) = if (selectedIndex >= 0) {
@@ -197,7 +204,8 @@ internal class CompositionSession(
             "" to ""
         }
         val consumedReading = originalReading.removeSuffix(remainingReading)
-        return CommitSnapshot(
+        return CompositionCommitPlan(
+            intent = CompositionCommitIntent.PARTIAL,
             text = text,
             raw = originalRaw,
             reading = originalReading,

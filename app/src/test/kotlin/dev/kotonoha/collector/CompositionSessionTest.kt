@@ -6,6 +6,7 @@ import dev.kotonoha.collector.editor.RemainingTextOutcome
 import dev.kotonoha.collector.ime.CompositionCommitter
 import dev.kotonoha.collector.ime.CorrectionTracker
 import dev.kotonoha.collector.ime.ImeEditHistory
+import dev.kotonoha.collector.input.CompositionCommitIntent
 import dev.kotonoha.collector.input.CompositionSession
 import dev.kotonoha.collector.input.ConversionEngine
 import org.junit.Assert.assertEquals
@@ -27,9 +28,10 @@ class CompositionSessionTest {
         assertEquals("PREDICTION", controller.candidateSource)
 
         assertEquals("変換:きょう", controller.convertOrCycle("前文"))
-        val preparedCommit = controller.planCurrentCommit()
+        val preparedCommit = controller.planCandidateCommit(controller.selectedCandidateIndex)
         assertNotNull(preparedCommit)
         val commit = preparedCommit!!
+        assertEquals(CompositionCommitIntent.PARTIAL, commit.intent)
         assertEquals("変換:きょう", commit.text)
         assertEquals(0, commit.selectedIndex)
 
@@ -71,7 +73,8 @@ class CompositionSessionTest {
         controller.append("だいがくきた", "")
 
         assertEquals("大学きた", controller.convertOrCycle(""))
-        val commit = controller.planCurrentCommit()!!
+        val commit = controller.planCandidateCommit(controller.selectedCandidateIndex)!!
+        assertEquals(CompositionCommitIntent.PARTIAL, commit.intent)
         assertEquals("大学", commit.text)
         assertEquals("だいがく", commit.consumedReading)
         assertEquals("きた", commit.remainingRaw)
@@ -84,6 +87,60 @@ class CompositionSessionTest {
         assertEquals("きた", controller.raw)
         assertEquals("きた", controller.reading)
         assertEquals(listOf("予測:きた", "きた"), controller.candidates)
+    }
+
+    @Test
+    fun fullCommitIncludesUnreadSuffixWithoutRecreatingComposition() {
+        val engine = FakeConversionEngine().apply {
+            conversionCandidates = listOf("大学", "だいがくきた")
+            candidateReadings[0] = "だいがく"
+        }
+        val controller = CompositionSession(engine) { "id-${engine.ids++}" }
+        controller.append("だいがくきた", "")
+        controller.convertOrCycle("")
+        val commit = controller.planFullCurrentCommit()!!
+        val editor = RecordingCompositionEditor()
+        val committer = CompositionCommitter(controller, editor, { it })
+
+        val applied = committer.apply(commit, "")!!
+
+        assertEquals(CompositionCommitIntent.FULL, commit.intent)
+        assertEquals("大学きた", commit.text)
+        assertEquals("だいがくきた", commit.consumedReading)
+        assertEquals("", commit.remainingRaw)
+        assertEquals("", commit.remainingReading)
+        assertEquals(listOf(RecordedCommit("大学きた", null, "")), editor.commits)
+        assertFalse(applied.preservesComposition)
+        assertFalse(controller.hasComposition)
+        assertEquals(listOf(0), engine.committedCandidates)
+    }
+
+    @Test
+    fun fullCommitInvariantsHoldAcrossLongReadingsAndPartialBoundaries() {
+        listOf(2, 16, 63, 64, 65, 100, 256).forEach { length ->
+            listOf(1, length / 2, length - 1).distinct().forEach { consumedLength ->
+                val reading = "あ".repeat(length)
+                val convertedPrefix = "亜".repeat(consumedLength)
+                val engine = FakeConversionEngine().apply {
+                    conversionCandidates = listOf(convertedPrefix)
+                    candidateReadings[0] = reading.take(consumedLength)
+                }
+                val controller = CompositionSession(engine) { "length-$length-$consumedLength" }
+                controller.append(reading, "")
+                controller.convertOrCycle("")
+
+                val partial = controller.planCandidateCommit(0)!!
+                val full = controller.planFullCurrentCommit()!!
+
+                assertEquals(CompositionCommitIntent.PARTIAL, partial.intent)
+                assertEquals(length - consumedLength, partial.remainingReading.length)
+                assertEquals(CompositionCommitIntent.FULL, full.intent)
+                assertEquals("", full.remainingRaw)
+                assertEquals("", full.remainingReading)
+                assertEquals(convertedPrefix + reading.drop(consumedLength), full.text)
+                assertEquals(reading, full.consumedReading)
+            }
+        }
     }
 
     @Test
@@ -110,7 +167,7 @@ class CompositionSessionTest {
         val controller = CompositionSession(engine) { "id-${engine.ids++}" }
         controller.append("だいがくきた", "")
         controller.convertOrCycle("")
-        val commit = controller.planCurrentCommit()!!
+        val commit = controller.planCandidateCommit(controller.selectedCandidateIndex)!!
 
         controller.completeCommit(
             commit,
@@ -128,7 +185,7 @@ class CompositionSessionTest {
         val controller = CompositionSession(engine) { "id-${engine.ids++}" }
         controller.append("きょう", "")
         controller.convertOrCycle("")
-        val commit = controller.planCurrentCommit()!!
+        val commit = controller.planCandidateCommit(controller.selectedCandidateIndex)!!
         val committer = CompositionCommitter(
             controller,
             FakeCompositionEditor(CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)),
@@ -152,7 +209,7 @@ class CompositionSessionTest {
         val controller = CompositionSession(engine) { "id-${engine.ids++}" }
         controller.append("だいがくきた", "")
         controller.convertOrCycle("")
-        val commit = controller.planCurrentCommit()!!
+        val commit = controller.planCandidateCommit(controller.selectedCandidateIndex)!!
         val committer = CompositionCommitter(
             controller,
             FakeCompositionEditor(
@@ -218,5 +275,28 @@ class CompositionSessionTest {
             remainingStyledText: CharSequence?,
             remainingPlainText: String,
         ): CompositionCommitOutcome = outcome
+    }
+
+    private data class RecordedCommit(
+        val committedText: String,
+        val remainingStyledText: String?,
+        val remainingPlainText: String,
+    )
+
+    private class RecordingCompositionEditor : CompositionEditor {
+        val commits = mutableListOf<RecordedCommit>()
+
+        override fun commitComposition(
+            committedText: String,
+            remainingStyledText: CharSequence?,
+            remainingPlainText: String,
+        ): CompositionCommitOutcome {
+            commits += RecordedCommit(
+                committedText,
+                remainingStyledText?.toString(),
+                remainingPlainText,
+            )
+            return CompositionCommitOutcome(true, RemainingTextOutcome.NONE)
+        }
     }
 }

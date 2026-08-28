@@ -6,6 +6,7 @@ import dev.kotonoha.collector.editor.EditorDirection
 import dev.kotonoha.collector.editor.EditorNavigation
 import dev.kotonoha.collector.editor.EditorTextMutations
 import dev.kotonoha.collector.editor.EditorTextQueries
+import dev.kotonoha.collector.input.CompositionCommitPlan
 import dev.kotonoha.collector.input.CompositionSession
 import dev.kotonoha.collector.input.ConversionEngine
 import dev.kotonoha.collector.input.FlickGesture
@@ -253,21 +254,14 @@ val commit = compositionSession.planCandidateCommit(index) ?: return false
 return commitSessionText(commit, "CONVERSION_COMMIT", commitMethod)
 }
 
-private fun commitCurrent(commitMethod:String):Boolean {
-val commit = compositionSession.planCurrentCommit() ?: return false
+private fun commitAllCurrent(commitMethod:String):Boolean {
+val commit = compositionSession.planFullCurrentCommit() ?: return false
 val eventType = if (commit.selectedIndex >= 0) "CONVERSION_COMMIT" else "READING_COMMIT"
 return commitSessionText(commit, eventType, commitMethod)
 }
 
-private fun commitAllCurrent(commitMethod:String):Boolean {
-while (compositionSession.hasComposition) {
-if (!commitCurrent(commitMethod)) return false
-}
-return true
-}
-
 private fun commitSessionText(
-commit:CompositionSession.CommitSnapshot,
+commit:CompositionCommitPlan,
 eventType:String,
 commitMethod:String):Boolean {
 if (commit.text.isEmpty())

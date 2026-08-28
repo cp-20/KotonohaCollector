@@ -2,13 +2,15 @@
 set -uo pipefail
 
 ADB_BIN="${ADB_BIN:-adb}"
-PACKAGE="dev.kotonoha.collector"
-IME="$PACKAGE/.CollectorImeService"
-TEST_ACTIVITY="$PACKAGE/.TestPadActivity"
+APP_ID="dev.cp20.kotonoha"
+CODE_PACKAGE="dev.kotonoha.collector"
+IME="$APP_ID/$CODE_PACKAGE.CollectorImeService"
+TEST_ACTIVITY="$APP_ID/$CODE_PACKAGE.TestPadActivity"
 REMOTE_XML="/sdcard/kotonoha-ime-test.xml"
-TEST_PREPARE_TELEMETRY="$PACKAGE.TEST_PREPARE_TELEMETRY"
-TEST_EXPORT_TELEMETRY="$PACKAGE.TEST_EXPORT_TELEMETRY"
-TEST_SET_SELECTION="$PACKAGE.TEST_SET_SELECTION"
+TEST_PREPARE_TELEMETRY="$CODE_PACKAGE.TEST_PREPARE_TELEMETRY"
+TEST_EXPORT_TELEMETRY="$CODE_PACKAGE.TEST_EXPORT_TELEMETRY"
+TEST_SET_SELECTION="$CODE_PACKAGE.TEST_SET_SELECTION"
+EXPECTED_DENSITY="${EXPECTED_DENSITY:-420}"
 TELEMETRY_EXPORT="cache/kotonoha-telemetry-test.jsonl"
 TELEMETRY_STATUS="cache/kotonoha-telemetry-status.txt"
 
@@ -24,7 +26,15 @@ editor_text() {
   adb_run shell uiautomator dump "$REMOTE_XML" >/dev/null 2>&1 || return 1
   adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
     | tr -d '\r' \
-    | perl -0777 -ne 'if (/content-desc="test-editor:([^"]*)"/) { print $1; }'
+    | perl -0777 -ne 'if (/content-desc="test-editor:([^"]*?);composing=-?\d+:-?\d+"/) { print $1; }'
+}
+
+composition_range() {
+  adb_run shell uiautomator dump "$REMOTE_XML" >/dev/null 2>&1 || return 1
+  adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
+    | tr -d '\r' \
+    | perl -0777 -ne \
+      'if (/content-desc="test-editor:[^"]*;composing=(-?\d+):(-?\d+)"/) { print "$1:$2"; }'
 }
 
 ime_cursor_position() {
@@ -54,6 +64,21 @@ wait_for_text() {
   return 1
 }
 
+wait_for_composition() {
+  local expected="$1"
+  local actual=""
+  local attempt
+  for attempt in $(seq 1 20); do
+    actual="$(composition_range)"
+    if [[ "$actual" == "$expected" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  printf '%s' "$actual"
+  return 1
+}
+
 ui_has_text() {
   local expected="$1"
   local attempt
@@ -74,7 +99,7 @@ wait_for_telemetry_status() {
   local actual=""
   local attempt
   for attempt in $(seq 1 40); do
-    actual="$(adb_run exec-out run-as "$PACKAGE" cat "$TELEMETRY_STATUS" 2>/dev/null \
+    actual="$(adb_run exec-out run-as "$APP_ID" cat "$TELEMETRY_STATUS" 2>/dev/null \
       | tr -d '\r' || true)"
     if [[ "$actual" == "$expected_prefix"* ]]; then
       return 0
@@ -105,6 +130,18 @@ assert_text() {
     fail_case "$label" "expected=[$expected] actual=[$actual]"
   fi
   # uiautomator may briefly retain input focus after writing its hierarchy.
+  sleep 0.18
+}
+
+assert_composition() {
+  local label="$1"
+  local expected="$2"
+  local actual
+  if actual="$(wait_for_composition "$expected")"; then
+    pass_case "$label"
+  else
+    fail_case "$label" "expected=[$expected] actual=[$actual]"
+  fi
   sleep 0.18
 }
 
@@ -195,7 +232,7 @@ type_daigakukita() {
 }
 
 require_device() {
-  local state size
+  local state size density package_path
   state="$(adb_run get-state 2>/dev/null | tr -d '\r' || true)"
   if [[ "$state" != "device" ]]; then
     printf 'No ready Android device. Set ADB_BIN or start Pixel_10a_API_36.\n' >&2
@@ -204,6 +241,16 @@ require_device() {
   size="$(adb_run shell wm size | tr -d '\r')"
   if [[ "$size" != *"1080x2424"* ]]; then
     printf 'Expected 1080x2424 Pixel test geometry, got: %s\n' "$size" >&2
+    exit 2
+  fi
+  density="$(adb_run shell wm density | tr -d '\r' | tail -n 1 | sed -nE 's/.*: ([0-9]+)$/\1/p')"
+  if [[ "$density" != "$EXPECTED_DENSITY" ]]; then
+    printf 'Expected Pixel test density %s, got: %s\n' "$EXPECTED_DENSITY" "$density" >&2
+    exit 2
+  fi
+  package_path="$(adb_run shell pm path "$APP_ID" 2>/dev/null | tr -d '\r')"
+  if [[ "$package_path" != package:* ]]; then
+    printf 'Debug APK %s is not installed.\n' "$APP_ID" >&2
     exit 2
   fi
 }
@@ -286,22 +333,22 @@ test_cursor_delete() {
 }
 
 test_selection_and_start_delete() {
-  fresh_pad "abcdef" "dev.kotonoha.collector.TEST_DELETE_ONE" 2 5
+  fresh_pad "abcdef" "$CODE_PACKAGE.TEST_DELETE_ONE" 2 5
   assert_text "delete replaces selected range" "abf"
   tap_key 108 1810
   assert_text "undo restores selected range" "abcdef"
 
-  fresh_pad "abc" "dev.kotonoha.collector.TEST_DELETE_ONE" 0 0
+  fresh_pad "abc" "$CODE_PACKAGE.TEST_DELETE_ONE" 0 0
   assert_text "delete at document start is a no-op" "abc"
 }
 
 test_word_swipe_delete() {
-  fresh_pad "abc test" "dev.kotonoha.collector.TEST_DELETE_WORD"
+  fresh_pad "abc test" "$CODE_PACKAGE.TEST_DELETE_WORD"
   assert_text "left swipe deletes previous word" "abc "
 }
 
 test_long_press_delete() {
-  fresh_pad "abcdef" "dev.kotonoha.collector.TEST_REPEAT_DELETE"
+  fresh_pad "abcdef" "$CODE_PACKAGE.TEST_REPEAT_DELETE"
   assert_text "long press repeat path deletes five characters" "a"
 }
 
@@ -482,8 +529,20 @@ test_partial_conversion_keeps_suffix() {
   assert_text "partial candidate keeps unread suffix visible" "大学きた"
   tap_key 90 1685
   assert_text "partial candidate commits only its consumed reading" "大学きた"
+  assert_composition "partial candidate keeps only unread suffix composing" "2:4"
   flick_key 972 1810 850 1810
   assert_text "word delete removes the remaining composition only" "大学"
+}
+
+test_enter_commits_partial_conversion_suffix_once() {
+  fresh_pad
+  type_daigakukita
+  tap_key 972 2074
+  tap_key 972 2208
+  assert_text "enter commits the full partial conversion" "大学きた"
+  assert_composition "enter clears the composing span" "-1:-1"
+  flick_key 972 1810 850 1810
+  assert_text "no duplicated composing suffix remains after enter" ""
 }
 
 test_emoji_cluster_delete() {
@@ -547,7 +606,7 @@ test_telemetry_schema_v3() {
     fail_case "telemetry fixture is exported" "status=[$status]"
     return
   fi
-  telemetry="$(adb_run exec-out run-as "$PACKAGE" cat "$TELEMETRY_EXPORT" 2>/dev/null \
+  telemetry="$(adb_run exec-out run-as "$APP_ID" cat "$TELEMETRY_EXPORT" 2>/dev/null \
     | tr -d '\r')"
   if jq -e -s '
       . as $rows
@@ -589,7 +648,8 @@ test_telemetry_schema_v3() {
 
 require_device
 adb_run logcat -c
-adb_run shell am force-stop "$PACKAGE" >/dev/null
+adb_run shell am force-stop "$APP_ID" >/dev/null
+adb_run shell ime enable "$IME" >/dev/null
 adb_run shell ime set "$IME" >/dev/null
 printf 'Kotonoha Pixel IME regression suite\n'
 # The very first bind also maps the large Mozc data file. Warm it once so gesture assertions
@@ -602,6 +662,7 @@ case "${1:-smoke}" in
     test_raw_delete
     test_conversion_display_and_cycle
     test_partial_conversion_keeps_suffix
+    test_enter_commits_partial_conversion_suffix_once
     test_mozc_candidates_after_different_commit
     test_accelerated_long_press_delete
     test_japanese_space
@@ -632,6 +693,7 @@ case "${1:-smoke}" in
     ;;
   partial_conversion)
     test_partial_conversion_keeps_suffix
+    test_enter_commits_partial_conversion_suffix_once
     ;;
   telemetry)
     test_telemetry_schema_v3
@@ -642,6 +704,7 @@ case "${1:-smoke}" in
     test_conversion_display_and_cycle
     test_conversion_auto_commit
     test_partial_conversion_keeps_suffix
+    test_enter_commits_partial_conversion_suffix_once
     test_mozc_candidates_after_different_commit
     test_delete_during_conversion
     test_committed_delete_and_undo

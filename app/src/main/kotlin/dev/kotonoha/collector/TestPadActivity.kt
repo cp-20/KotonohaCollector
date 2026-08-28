@@ -27,6 +27,12 @@ import java.nio.charset.StandardCharsets
  class TestPadActivity:Activity() {
 
 private var editor:EditText? = null
+private val testStateReporter = object : Runnable {
+override fun run() {
+refreshTestState()
+editor?.postDelayed(this, TEST_STATE_REFRESH_MS)
+}
+}
 
 protected override fun onCreate(savedInstanceState:Bundle?) {
 super.onCreate(savedInstanceState)
@@ -42,6 +48,16 @@ initialText(intent),
 intent!!.getIntExtra(EXTRA_SELECTION_START, -1), 
 intent!!.getIntExtra(EXTRA_SELECTION_END, -1), 
 intent!!.getStringExtra(EXTRA_IME_TEST_COMMAND))
+}
+
+protected override fun onResume() {
+super.onResume()
+if (BuildConfig.DEBUG) editor?.post(testStateReporter)
+}
+
+protected override fun onPause() {
+editor?.removeCallbacks(testStateReporter)
+super.onPause()
 }
 
 private fun buildContent():View {
@@ -90,7 +106,7 @@ value:CharSequence?, start:Int, count:Int, after:Int) {}
 
 override fun onTextChanged(
 value:CharSequence?, start:Int, before:Int, count:Int) {
-editor!!.setContentDescription("test-editor:" + value!!)
+refreshTestState()
 }
 
 override fun afterTextChanged(value:Editable?) {}
@@ -106,6 +122,16 @@ manager!!.showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT)
 dispatchImeTestCommand(
 manager, getIntent().getStringExtra(EXTRA_IME_TEST_COMMAND)) }, 250)
 return root
+}
+
+private fun refreshTestState() {
+val editable = editor?.text ?: return
+val composingStart = android.view.inputmethod.BaseInputConnection
+.getComposingSpanStart(editable)
+val composingEnd = android.view.inputmethod.BaseInputConnection
+.getComposingSpanEnd(editable)
+editor!!.contentDescription =
+"test-editor:$editable;composing:$composingStart:$composingEnd"
 }
 
 private fun resetEditor(
@@ -199,5 +225,6 @@ internal val EXTRA_INITIAL_TEXT_BASE64 = "initial_text_base64"
 internal val EXTRA_IME_TEST_COMMAND = "ime_test_command"
 internal val EXTRA_SELECTION_START = "selection_start"
 internal val EXTRA_SELECTION_END = "selection_end"
+private const val TEST_STATE_REFRESH_MS = 50L
 }
 }

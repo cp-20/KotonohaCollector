@@ -2,6 +2,8 @@ package dev.kotonoha.collector.ime
 
 import dev.kotonoha.collector.editor.CompositionEditor
 import dev.kotonoha.collector.editor.RemainingTextOutcome
+import dev.kotonoha.collector.input.CompositionCommitIntent
+import dev.kotonoha.collector.input.CompositionCommitPlan
 import dev.kotonoha.collector.input.CompositionSession
 
 internal data class AppliedCompositionCommit(
@@ -17,10 +19,9 @@ internal class CompositionCommitter(
     private val styleComposition: (String) -> CharSequence,
 ) {
     fun apply(
-        commit: CompositionSession.CommitSnapshot,
+        commit: CompositionCommitPlan,
         contextBefore: String,
     ): AppliedCompositionCommit? {
-        if (commit.text.isEmpty()) return null
         val remainingStyled = commit.remainingReading
             .takeIf(String::isNotEmpty)
             ?.let(styleComposition)
@@ -31,7 +32,9 @@ internal class CompositionCommitter(
         )
         if (!outcome.committed) return null
 
-        val preservesComposition = outcome.remainingText == RemainingTextOutcome.COMPOSING
+        val preservesComposition =
+            commit.intent == CompositionCommitIntent.PARTIAL &&
+                outcome.remainingText == RemainingTextOutcome.COMPOSING
         val insertedSuffix = when (outcome.remainingText) {
             RemainingTextOutcome.COMPOSING,
             RemainingTextOutcome.COMMITTED_LITERAL,
