@@ -49,6 +49,23 @@ ime_editor_has_focus() {
     | perl -ne '$found = 1 if /mServedView=android\.widget\.EditText/; END { exit($found ? 0 : 1); }'
 }
 
+require_ime_window_visible() {
+  local attempt
+  local visibility=""
+  for attempt in $(seq 1 40); do
+    visibility="$(adb_run shell dumpsys input_method 2>/dev/null \
+      | tr -d '\r' \
+      | sed -nE 's/.*mImeWindowVis=([0-9]+).*/\1/p' \
+      | tail -n 1)"
+    if [[ "$visibility" =~ ^[0-9]+$ ]] && (( (visibility & 2) != 0 )); then
+      return 0
+    fi
+    sleep 0.25
+  done
+  printf 'IME window did not become visible (mImeWindowVis=%s).\n' "$visibility" >&2
+  exit 2
+}
+
 wait_for_text() {
   local expected="$1"
   local actual=""
@@ -670,6 +687,7 @@ printf 'Kotonoha Pixel IME regression suite\n'
 # The very first bind also maps the large Mozc data file. Warm it once so gesture assertions
 # never race the initial input-view animation or native engine startup.
 fresh_pad
+require_ime_window_visible
 sleep 1
 case "${1:-smoke}" in
   smoke)

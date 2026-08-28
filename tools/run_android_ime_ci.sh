@@ -17,4 +17,5 @@ trap collect_diagnostics EXIT
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell wm size 1080x2424
 adb shell wm density 420
+adb shell settings put secure show_ime_with_hard_keyboard 1
 tools/run_pixel_ime_tests.sh "${test_group}"
