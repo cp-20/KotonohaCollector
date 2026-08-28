@@ -116,6 +116,25 @@ class CompositionSessionTest {
     }
 
     @Test
+    fun debugPartialFixtureDoesNotDependOnNativeDictionarySegmentation() {
+        val engine = FakeConversionEngine()
+        val controller = CompositionSession(engine) { "fixture-id" }
+
+        val displayed = controller.prepareDebugPartialConversion(
+            raw = "だいがくきた",
+            candidate = "大学",
+            candidateReading = "だいがく",
+        )
+        val partial = controller.planCandidateCommit(0)!!
+        val full = controller.planFullCurrentCommit()!!
+
+        assertEquals("大学きた", displayed)
+        assertEquals("きた", partial.remainingReading)
+        assertEquals("大学きた", full.text)
+        assertEquals(CompositionCommitIntent.FULL, full.intent)
+    }
+
+    @Test
     fun fullCommitInvariantsHoldAcrossLongReadingsAndPartialBoundaries() {
         listOf(2, 16, 63, 64, 65, 100, 256).forEach { length ->
             listOf(1, length / 2, length - 1).distinct().forEach { consumedLength ->

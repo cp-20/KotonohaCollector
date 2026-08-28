@@ -107,6 +107,22 @@ fun setSelection(start:Int, end:Int) {
 navigation.setSelection(start, end)
 }
 
+fun preparePartialConversionTest():Boolean {
+val text = compositionSession.prepareDebugPartialConversion(
+raw = "だいがくきた",
+candidate = "大学",
+candidateReading = "だいがく",
+)
+if (!textMutations.updateComposition(styledComposition(text))) {
+abortCompositionAfterEditorRejection()
+refreshCandidateViews()
+return false
+}
+displayedComposition = text
+refreshCandidateViews()
+return true
+}
+
 fun requestKeyboardModeChange(from:KeyboardMode, to:KeyboardMode):Boolean =
 from != KeyboardMode.KANA_FLICK ||
 to == KeyboardMode.KANA_FLICK ||

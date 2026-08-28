@@ -14,6 +14,8 @@ internal class CompositionSession(
 ) {
     private val rawBuffer = StringBuilder()
     private val candidateBuffer = mutableListOf<String>()
+    private var debugFixtureActive = false
+    private var debugFixtureCandidateReadings = emptyList<String>()
 
     val raw: String
         get() = rawBuffer.toString()
@@ -114,6 +116,26 @@ internal class CompositionSession(
     fun selectedCandidateText(): String? =
         candidateBuffer.getOrNull(selectedCandidateIndex)
 
+    /** Creates a deterministic partial conversion used only by debug emulator tests. */
+    fun prepareDebugPartialConversion(
+        raw: String,
+        candidate: String,
+        candidateReading: String,
+    ): String {
+        require(raw.isNotEmpty() && candidate.isNotEmpty() && candidateReading.isNotEmpty())
+        clearComposition()
+        rawBuffer.append(raw)
+        ensureCompositionId()
+        val fullReading = reading
+        require(fullReading.startsWith(candidateReading) && candidateReading.length < fullReading.length)
+        candidateBuffer += candidate
+        selectedCandidateIndex = 0
+        candidateSource = CANDIDATE_SOURCE_CONVERSION
+        debugFixtureActive = true
+        debugFixtureCandidateReadings = listOf(candidateReading)
+        return candidate + remainingForCandidate(0).second
+    }
+
     private fun selectedCompositionText(): String? {
         val candidate = selectedCandidateText() ?: return null
         return candidate + remainingForCandidate(selectedCandidateIndex).second
@@ -159,10 +181,12 @@ internal class CompositionSession(
         contextBefore: String = "",
         preserveRemainingComposition: Boolean = true,
     ) {
-        if (commit.selectedIndex >= 0) {
-            conversionEngine.candidateCommitted(commit.selectedIndex)
-        } else {
-            conversionEngine.readingCommitted()
+        if (!debugFixtureActive) {
+            if (commit.selectedIndex >= 0) {
+                conversionEngine.candidateCommitted(commit.selectedIndex)
+            } else {
+                conversionEngine.readingCommitted()
+            }
         }
         clearState()
         if (preserveRemainingComposition && commit.remainingRaw.isNotEmpty()) {
@@ -179,7 +203,7 @@ internal class CompositionSession(
     }
 
     fun clearComposition() {
-        if (rawBuffer.isNotEmpty()) conversionEngine.discardComposition()
+        if (rawBuffer.isNotEmpty() && !debugFixtureActive) conversionEngine.discardComposition()
         clearState()
     }
 
@@ -221,7 +245,8 @@ internal class CompositionSession(
 
     private fun remainingForCandidate(index: Int): Pair<String, String> {
         val fullReading = reading
-        val candidateReading = conversionEngine.candidateReading(index).orEmpty()
+        val candidateReading = debugFixtureCandidateReadings.getOrNull(index)
+            ?: conversionEngine.candidateReading(index).orEmpty()
         val consumedReading = when {
             candidateReading.isEmpty() -> fullReading
             fullReading.startsWith(candidateReading) -> candidateReading
@@ -255,6 +280,8 @@ internal class CompositionSession(
         selectedCandidateIndex = -1
         compositionId = ""
         candidateSource = CANDIDATE_SOURCE_NONE
+        debugFixtureActive = false
+        debugFixtureCandidateReadings = emptyList()
     }
 
     private companion object {

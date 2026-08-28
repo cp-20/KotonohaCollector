@@ -10,6 +10,7 @@ REMOTE_XML="/sdcard/kotonoha-ime-test.xml"
 TEST_PREPARE_TELEMETRY="$CODE_PACKAGE.TEST_PREPARE_TELEMETRY"
 TEST_EXPORT_TELEMETRY="$CODE_PACKAGE.TEST_EXPORT_TELEMETRY"
 TEST_SET_SELECTION="$CODE_PACKAGE.TEST_SET_SELECTION"
+TEST_PREPARE_PARTIAL_CONVERSION="$CODE_PACKAGE.TEST_PREPARE_PARTIAL_CONVERSION"
 EXPECTED_DENSITY="${EXPECTED_DENSITY:-420}"
 TELEMETRY_EXPORT="cache/kotonoha-telemetry-test.jsonl"
 TELEMETRY_STATUS="cache/kotonoha-telemetry-status.txt"
@@ -244,6 +245,13 @@ tap_key() {
   adb_run shell input tap "$1" "$2"
 }
 
+press_key() {
+  adb_run shell input motionevent DOWN "$1" "$2"
+  sleep 0.08
+  adb_run shell input motionevent UP "$1" "$2"
+  sleep 0.1
+}
+
 flick_key() {
   adb_run shell input swipe "$1" "$2" "$3" "$4" 160
 }
@@ -324,7 +332,7 @@ test_raw_delete() {
   tap_key 324 1810
   flick_key 324 1810 245 1810
   assert_text "raw input before delete" "あい"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete one composing kana" "あ"
 }
 
@@ -333,7 +341,7 @@ test_modifier_delete() {
   tap_key 540 1810
   tap_key 324 2208
   assert_text "dakuten modifier" "が"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete modified kana" ""
 }
 
@@ -367,14 +375,14 @@ test_delete_during_conversion() {
   fresh_pad
   type_kyou
   tap_key 972 2074
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete during conversion restores shortened reading" "きょ"
 }
 
 test_committed_delete_and_undo() {
   fresh_pad "abc"
   assert_text "debug pad initial text" "abc"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete committed character" "ab"
   tap_key 108 1810
   assert_text "undo restores deleted character" "abc"
@@ -382,7 +390,7 @@ test_committed_delete_and_undo() {
 
 test_undo_is_invalidated_after_cursor_move() {
   fresh_pad "abc"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete before moving away from undo anchor" "ab"
   tap_key 108 1942
   tap_key 108 1810
@@ -392,7 +400,7 @@ test_undo_is_invalidated_after_cursor_move() {
 test_cursor_delete() {
   fresh_pad "abc"
   tap_key 108 1942
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete respects moved cursor" "ac"
 }
 
@@ -586,10 +594,8 @@ test_mozc_candidates_after_different_commit() {
 }
 
 test_partial_conversion_keeps_suffix() {
-  fresh_pad
-  type_daigakukita
-  assert_text "reading before partial conversion" "だいがくきた"
-  tap_key 972 2074
+  fresh_pad "" "$TEST_PREPARE_PARTIAL_CONVERSION"
+  assert_text "partial conversion fixture shows unread suffix" "大学きた"
   assert_text "partial candidate keeps unread suffix visible" "大学きた"
   tap_key 90 1685
   assert_text "partial candidate commits only its consumed reading" "大学きた"
@@ -599,9 +605,7 @@ test_partial_conversion_keeps_suffix() {
 }
 
 test_enter_commits_partial_conversion_suffix_once() {
-  fresh_pad
-  type_daigakukita
-  tap_key 972 2074
+  fresh_pad "" "$TEST_PREPARE_PARTIAL_CONVERSION"
   tap_key 972 2208
   assert_text "enter commits the full partial conversion" "大学きた"
   assert_composition "enter clears the composing span" "-1:-1"
@@ -611,15 +615,15 @@ test_enter_commits_partial_conversion_suffix_once() {
 
 test_emoji_cluster_delete() {
   fresh_pad "A👨‍👩‍👧‍👦"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete keeps ZWJ emoji atomic" "A"
 
   fresh_pad "A🇯🇵"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete keeps flag emoji atomic" "A"
 
   fresh_pad "A👍🏽"
-  tap_key 972 1810
+  press_key 972 1810
   assert_text "delete keeps skin-tone emoji atomic" "A"
 }
 
@@ -653,12 +657,12 @@ test_telemetry_schema_v3() {
   # must remain in the same composition instead of committing あ eagerly.
   flick_key 324 1942 324 1852
   tap_key 324 2208
-  tap_key 972 1810
+  press_key 972 1810
   tap_key 324 1810
   tap_key 756 2208
   tap_key 972 2208
   # Delete committed 、, replace it with い, and commit again.
-  tap_key 972 1810
+  press_key 972 1810
   flick_key 324 1810 245 1810
   tap_key 972 2208
   assert_text "punctuation stays composing until enter and can be replaced" "あい"
