@@ -2,7 +2,7 @@
 
 原則は「Androidを必要としない判定を、端末テストへ持ち込まない」です。日常の変更ではホスト単体テストを実行し、IME・InputConnection・Mozc JNIという代替できない境界だけを小さなPixelスモークテストで確認します。
 
-## 1. ホスト単体テスト（既定・43件）
+## 1. ホスト単体テスト（既定・45件）
 
 エミュレータ不要のJUnitです。パッケージ依存方向、Composition状態遷移、部分確定／全確定の不変条件、Editor呼び出し回数・確定拒否・suffix fallback、長文と分割位置、訂正系列、Undo位置アンカー、候補状態遷移、ローマ字変換、濁点／小書き、Unicode削除境界、語削除判定、削除／カーソルリピート速度、全角空白、角丸上限、フォールバック変換、プロセス内クリップボード履歴、プライバシー判定、パッケージID、Unicode絵文字カタログ解析、schema v3のキーと型を対象にします。
 
@@ -26,7 +26,7 @@ Robolectricは現在使いません。Android APIを模倣する層を増やす�
 - Mozc JNIが初期化され、変換キーで候補が切り替わる
 - 部分候補「大学」の確定後も、未消費の読み「きた」が未確定のまま残る
 - Enterによる全確定後はcomposing spanが消え、未確定末尾が複製されない
-- 候補バーで「今日」を確定後、「あした」が古い読みを使わず「明日」へ変換される
+- 選択中の「今日」を次の入力で自動確定後、「あした」が古い読みを使わず「明日」へ変換される
 - 削除キー900ms長押しが実タッチ経路で加速する
 - かな面の空白がU+3000になる
 - 10回の高速タップに欠落・重複がない
@@ -44,7 +44,7 @@ ADB_BIN=/path/to/adb tools/run_pixel_ime_tests.sh smoke
 
 ## 3. GitHub ActionsエミュレータCI
 
-`.github/workflows/android-ime.yml` はAndroid関連のpush／pull requestで43件のホストテスト後にAPI 36・x86_64 AVDを起動し、Pixelスモークを実行します。毎日03:17 JSTのscheduled runでは `all`、手動実行では `smoke`／`all`を選択できます。AVDへdebug APKを新規インストールしてIMEを有効化するため、ローカル端末の状態には依存しません。失敗時はlogcat、`dumpsys input_method`、UI XMLをartifactとして保存します。
+`.github/workflows/android-ime.yml` はAndroid関連のpush／pull requestで45件のホストテスト後にAPI 36・x86_64 AVDを起動し、Pixelスモークを実行します。毎日03:17 JSTのscheduled runでは `all`、手動実行では `smoke`／`all`を選択できます。AVDへdebug APKを新規インストールしてIMEを有効化するため、ローカル端末の状態には依存しません。失敗時はlogcat、`dumpsys input_method`、UI XMLをartifactとして保存します。
 
 ## 4. Pixel全回帰（リリース前・定期）
 
@@ -71,4 +71,4 @@ ADB_BIN=/path/to/adb tools/run_pixel_ime_tests.sh all
 | 実座標のフリック／長押し | 不可 | 代表経路 | リリース前 |
 | 見た目・アニメーション | 不可 | 不要 | スクリーンショット／手動確認 |
 
-これにより通常の変更は43件のホストテストで素早く判定し、Android関連変更では続けてPixelスモークを実行します。Android起動が必要なのはIMEフレームワーク、Mozc JNI、Keystore／SQLite／JSONL境界へ触れた変更とリリース候補だけです。「つ → っ → づ」の循環順と全角句読点の未確定方針は純粋Kotlinの単体テストでも確認するため、専用のエミュレータケースを増やしていません。
+これにより通常の変更は45件のホストテストで素早く判定し、Android関連変更では続けてPixelスモークを実行します。Android起動が必要なのはIMEフレームワーク、Mozc JNI、Keystore／SQLite／JSONL境界へ触れた変更とリリース候補だけです。「つ → っ → づ」の循環順と全角句読点の未確定方針は純粋Kotlinの単体テストでも確認するため、専用のエミュレータケースを増やしていません。

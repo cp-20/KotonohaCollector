@@ -123,6 +123,7 @@ class CollectorImeService : InputMethodService() {
             TEST_REPEAT_DELETE -> repeat(5) { coordinator.deleteOne() }
             TEST_DELETE_ONE -> coordinator.deleteOne()
             TEST_PREPARE_PARTIAL_CONVERSION -> coordinator.preparePartialConversionTest()
+            TEST_COMMIT_PARTIAL_CONVERSION -> coordinator.commitPartialConversionTest()
         }
     }
 
@@ -164,6 +165,8 @@ class CollectorImeService : InputMethodService() {
         internal const val TEST_DELETE_ONE = "dev.kotonoha.collector.TEST_DELETE_ONE"
         internal const val TEST_PREPARE_PARTIAL_CONVERSION =
             "dev.kotonoha.collector.TEST_PREPARE_PARTIAL_CONVERSION"
+        internal const val TEST_COMMIT_PARTIAL_CONVERSION =
+            "dev.kotonoha.collector.TEST_COMMIT_PARTIAL_CONVERSION"
         internal const val TEST_SELECTION_START = "selection_start"
         internal const val TEST_SELECTION_END = "selection_end"
         internal const val TEST_PREPARE_TELEMETRY =

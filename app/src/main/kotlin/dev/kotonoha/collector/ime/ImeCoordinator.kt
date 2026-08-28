@@ -123,6 +123,9 @@ refreshCandidateViews()
 return true
 }
 
+fun commitPartialConversionTest():Boolean =
+preparePartialConversionTest() && commitCandidate(0, "DEBUG_PARTIAL_COMMIT")
+
 fun requestKeyboardModeChange(from:KeyboardMode, to:KeyboardMode):Boolean =
 from != KeyboardMode.KANA_FLICK ||
 to == KeyboardMode.KANA_FLICK ||

@@ -11,6 +11,7 @@ TEST_PREPARE_TELEMETRY="$CODE_PACKAGE.TEST_PREPARE_TELEMETRY"
 TEST_EXPORT_TELEMETRY="$CODE_PACKAGE.TEST_EXPORT_TELEMETRY"
 TEST_SET_SELECTION="$CODE_PACKAGE.TEST_SET_SELECTION"
 TEST_PREPARE_PARTIAL_CONVERSION="$CODE_PACKAGE.TEST_PREPARE_PARTIAL_CONVERSION"
+TEST_COMMIT_PARTIAL_CONVERSION="$CODE_PACKAGE.TEST_COMMIT_PARTIAL_CONVERSION"
 EXPECTED_DENSITY="${EXPECTED_DENSITY:-420}"
 TELEMETRY_EXPORT="cache/kotonoha-telemetry-test.jsonl"
 TELEMETRY_STATUS="cache/kotonoha-telemetry-status.txt"
@@ -584,21 +585,19 @@ test_mozc_candidates_after_different_commit() {
   fresh_pad
   type_kyou
   tap_key 972 2074
-  # Commit the highlighted conversion by tapping the candidate strip. This is
+  # Typing the next reading commits the highlighted conversion first. This is
   # the path that previously left the old native preedit observable.
-  tap_key 90 1685
-  assert_text "candidate-strip tap commits first phrase" "今日"
   type_ashita
-  assert_text "different reading follows candidate-strip commit" "今日あした"
+  assert_text "different reading auto-commits the selected candidate" "今日あした"
   tap_key 972 2074
   assert_text "Mozc converts the new reading instead of the stale one" "今日明日"
 }
 
 test_partial_conversion_keeps_suffix() {
-  fresh_pad "" "$TEST_PREPARE_PARTIAL_CONVERSION"
-  assert_text "partial conversion fixture shows unread suffix" "大学きた"
-  assert_text "partial candidate keeps unread suffix visible" "大学きた"
-  tap_key 90 1685
+  # Prepare and commit through one debug command. A fixed screen coordinate can
+  # miss the candidate toolbar while leaving the same displayed text, producing
+  # a false positive for the tap followed by false composition failures.
+  fresh_pad "" "$TEST_COMMIT_PARTIAL_CONVERSION"
   assert_text "partial candidate commits only its consumed reading" "大学きた"
   assert_composition "partial candidate keeps only unread suffix composing" "2:4"
   flick_key 972 1810 850 1810

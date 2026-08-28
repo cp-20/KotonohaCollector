@@ -70,6 +70,21 @@ class ImeCoordinatorTest {
     }
 
     @Test
+    fun debugPartialCommitCommandExercisesTheAcceptedEditorTransaction() {
+        val (coordinator, editor) = coordinatorWithEditor()
+
+        assertTrue(coordinator.commitPartialConversionTest())
+
+        assertEquals(
+            listOf(RecordedCompositionCommit("大学", "きた", "きた")),
+            editor.compositionCommits,
+        )
+        assertEquals("大学きた", editor.text)
+        assertEquals("きた", editor.composition)
+        assertFalse(coordinator.candidates.isEmpty())
+    }
+
+    @Test
     fun rejectedFullCommitLeavesEditorAndSessionCompositionUntouched() {
         val (coordinator, editor) = preparedPartialConversion()
         editor.compositionCommitOutcomeOverride =
@@ -84,6 +99,14 @@ class ImeCoordinatorTest {
     }
 
     private fun preparedPartialConversion(): Pair<ImeCoordinator, RecordingEditorGateway> {
+        val (coordinator, editor) = coordinatorWithEditor()
+        coordinator.handleFlickInput("だいがくきた", GESTURE)
+        coordinator.showConversionCandidates()
+        assertEquals("大学きた", editor.composition)
+        return coordinator to editor
+    }
+
+    private fun coordinatorWithEditor(): Pair<ImeCoordinator, RecordingEditorGateway> {
         val editor = RecordingEditorGateway()
         val coordinator = ImeCoordinator(
             compositionEditor = editor,
@@ -94,9 +117,6 @@ class ImeCoordinatorTest {
             telemetry = NoOpTelemetry(),
             styleComposition = { it },
         )
-        coordinator.handleFlickInput("だいがくきた", GESTURE)
-        coordinator.showConversionCandidates()
-        assertEquals("大学きた", editor.composition)
         return coordinator to editor
     }
 
