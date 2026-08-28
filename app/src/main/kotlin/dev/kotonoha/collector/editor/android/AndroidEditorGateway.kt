@@ -21,43 +21,35 @@ internal class AndroidEditorGateway(
 
     override fun commitComposition(
         committedText: String,
-        remainingStyledText: CharSequence?,
+        _remainingStyledText: CharSequence?,
         remainingPlainText: String,
     ): CompositionCommitOutcome {
         val connection = connectionProvider()
             ?: return CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
         runCatching { connection.beginBatchEdit() }
         return try {
-            val committed = if (remainingPlainText.isEmpty()) {
-                runCatching { connection.commitText(committedText, 1) }.getOrDefault(false)
-            } else {
-                // Replacing a styled preedit via commitText can leave old SPAN_COMPOSING flags
-                // attached to the committed prefix in EditText. Replace it as composition first,
-                // then close that composition so the suffix starts with a clean span boundary.
-                runCatching {
-                    connection.setComposingText(committedText, 1) &&
-                        connection.finishComposingText()
-                }.getOrDefault(false)
-            }
-            if (!committed) {
+            val replacement = committedText + remainingPlainText
+            if (!runCatching { connection.commitText(replacement, 1) }.getOrDefault(false)) {
                 CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
             } else if (remainingPlainText.isEmpty()) {
                 CompositionCommitOutcome(true, RemainingTextOutcome.NONE)
-            } else if (
-                remainingStyledText != null &&
-                runCatching {
-                    connection.setComposingText(remainingStyledText, 1)
-                }.getOrDefault(false)
-            ) {
-                CompositionCommitOutcome(true, RemainingTextOutcome.COMPOSING)
-            } else if (
-                runCatching { connection.commitText(remainingPlainText, 1) }.getOrDefault(false)
-            ) {
-                // The prefix has already been committed. Preserve the user's suffix even when the
-                // target editor rejects a new composing range.
-                CompositionCommitOutcome(true, RemainingTextOutcome.COMMITTED_LITERAL)
             } else {
-                CompositionCommitOutcome(true, RemainingTextOutcome.REJECTED)
+                val cursor = runCatching {
+                    connection.getExtractedText(ExtractedTextRequest(), 0)?.selectionEnd ?: -1
+                }.getOrDefault(-1)
+                val suffixStart = cursor - remainingPlainText.length
+                if (
+                    suffixStart >= 0 &&
+                    runCatching {
+                        connection.setComposingRegion(suffixStart, cursor)
+                    }.getOrDefault(false)
+                ) {
+                    CompositionCommitOutcome(true, RemainingTextOutcome.COMPOSING)
+                } else {
+                    // The complete replacement already contains the suffix, so a target editor
+                    // that cannot expose its cursor still preserves the user's text as literal.
+                    CompositionCommitOutcome(true, RemainingTextOutcome.COMMITTED_LITERAL)
+                }
             }
         } finally {
             runCatching { connection.endBatchEdit() }

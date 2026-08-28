@@ -243,6 +243,7 @@ fresh_pad() {
 
 tap_key() {
   adb_run shell input tap "$1" "$2"
+  sleep 0.1
 }
 
 press_key() {
