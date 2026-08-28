@@ -86,12 +86,26 @@ ui_has_text() {
     adb_run shell uiautomator dump "$REMOTE_XML" >/dev/null 2>&1 || true
     if adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
       | tr -d '\r' \
-      | rg -Fq "text=\"$expected\""; then
+      | grep -Fq "text=\"$expected\""; then
       return 0
     fi
     sleep 0.1
   done
   return 1
+}
+
+require_host_tools() {
+  local tool
+  if ! command -v "$ADB_BIN" >/dev/null 2>&1; then
+    printf 'Required ADB command is not installed: %s\n' "$ADB_BIN" >&2
+    exit 2
+  fi
+  for tool in base64 grep jq perl sed seq tail tr; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      printf 'Required host command is not installed: %s\n' "$tool" >&2
+      exit 2
+    fi
+  done
 }
 
 wait_for_telemetry_status() {
@@ -167,7 +181,7 @@ fresh_pad() {
     local attempt
     for attempt in $(seq 1 40); do
       if adb_run logcat -d -v brief KotonohaMozc:I '*:S' 2>/dev/null \
-        | tr -d '\r' | rg -q 'Mozc initialized'; then
+        | tr -d '\r' | grep -q 'Mozc initialized'; then
         IME_READY=1
         break
       fi
@@ -646,6 +660,7 @@ test_telemetry_schema_v3() {
   fi
 }
 
+require_host_tools
 require_device
 adb_run logcat -c
 adb_run shell am force-stop "$APP_ID" >/dev/null

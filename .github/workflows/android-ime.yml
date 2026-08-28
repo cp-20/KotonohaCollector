@@ -17,6 +17,7 @@ on:
     paths:
       - ".github/workflows/android-ime.yml"
       - "app/**"
+      - "tools/run_android_ime_ci.sh"
       - "tools/run_pixel_ime_tests.sh"
       - "build.gradle"
       - "settings.gradle"
@@ -28,6 +29,7 @@ on:
     paths:
       - ".github/workflows/android-ime.yml"
       - "app/**"
+      - "tools/run_android_ime_ci.sh"
       - "tools/run_pixel_ime_tests.sh"
       - "build.gradle"
       - "settings.gradle"
