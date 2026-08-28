@@ -108,7 +108,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           script: |
-            set -euxo pipefail
+            set -eu
             artifact_dir="${RUNNER_TEMP}/android-ime-artifacts"
             mkdir -p "${artifact_dir}"
             collect_diagnostics() {
