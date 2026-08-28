@@ -22,6 +22,23 @@ adb_run() {
   "$ADB_BIN" "$@"
 }
 
+select_test_ime() {
+  local attempt
+  local selected=""
+  adb_run shell ime enable "$IME" >/dev/null
+  adb_run shell ime set "$IME" >/dev/null
+  for attempt in $(seq 1 20); do
+    selected="$(adb_run shell settings get secure default_input_method 2>/dev/null \
+      | tr -d '\r')"
+    if [[ "$selected" == "$IME" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  printf 'Failed to select test IME: expected=%s actual=%s\n' "$IME" "$selected" >&2
+  exit 2
+}
+
 editor_text() {
   adb_run shell uiautomator dump "$REMOTE_XML" >/dev/null 2>&1 || return 1
   adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
@@ -51,18 +68,24 @@ ime_editor_has_focus() {
 
 require_ime_window_visible() {
   local attempt
+  local selected=""
   local visibility=""
   for attempt in $(seq 1 40); do
+    selected="$(adb_run shell settings get secure default_input_method 2>/dev/null \
+      | tr -d '\r')"
     visibility="$(adb_run shell dumpsys input_method 2>/dev/null \
       | tr -d '\r' \
       | sed -nE 's/.*mImeWindowVis=([0-9]+).*/\1/p' \
       | tail -n 1)"
-    if [[ "$visibility" =~ ^[0-9]+$ ]] && (( (visibility & 2) != 0 )); then
+    if [[ "$selected" == "$IME" \
+      && "$visibility" =~ ^[0-9]+$ ]] \
+      && (( (visibility & 2) != 0 )); then
       return 0
     fi
     sleep 0.25
   done
-  printf 'IME window did not become visible (mImeWindowVis=%s).\n' "$visibility" >&2
+  printf 'Test IME did not become visible (selected=%s mImeWindowVis=%s).\n' \
+    "$selected" "$visibility" >&2
   exit 2
 }
 
@@ -184,6 +207,7 @@ fresh_pad() {
   local encoded=""
   local -a start_args=(shell am start -W -n "$TEST_ACTIVITY"
     --activity-clear-top --activity-single-top)
+  select_test_ime
   if [[ -n "$initial_text" ]]; then
     encoded="$(printf '%s' "$initial_text" | base64 | tr -d '\r\n')"
     start_args+=(--es initial_text_base64 "$encoded")
@@ -681,8 +705,7 @@ require_host_tools
 require_device
 adb_run logcat -c
 adb_run shell am force-stop "$APP_ID" >/dev/null
-adb_run shell ime enable "$IME" >/dev/null
-adb_run shell ime set "$IME" >/dev/null
+select_test_ime
 printf 'Kotonoha Pixel IME regression suite\n'
 # The very first bind also maps the large Mozc data file. Warm it once so gesture assertions
 # never race the initial input-view animation or native engine startup.
