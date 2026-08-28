@@ -17,6 +17,7 @@ TELEMETRY_STATUS="cache/kotonoha-telemetry-status.txt"
 PASS_COUNT=0
 FAIL_COUNT=0
 IME_READY=0
+INSTALLED_APP_VERSION=""
 
 adb_run() {
   "$ADB_BIN" "$@"
@@ -43,7 +44,7 @@ editor_text() {
   adb_run shell uiautomator dump "$REMOTE_XML" >/dev/null 2>&1 || return 1
   adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
     | tr -d '\r' \
-    | perl -0777 -ne 'if (/content-desc="test-editor:([^"]*?);composing=-?\d+:-?\d+"/) { print $1; }'
+    | perl -0777 -ne 'if (/content-desc="test-editor:([^"]*?);composing:-?\d+:-?\d+"/) { print $1; }'
 }
 
 composition_range() {
@@ -51,7 +52,7 @@ composition_range() {
   adb_run exec-out cat "$REMOTE_XML" 2>/dev/null \
     | tr -d '\r' \
     | perl -0777 -ne \
-      'if (/content-desc="test-editor:[^"]*;composing=(-?\d+):(-?\d+)"/) { print "$1:$2"; }'
+      'if (/content-desc="test-editor:[^"]*;composing:(-?\d+):(-?\d+)"/) { print "$1:$2"; }'
 }
 
 ime_cursor_position() {
@@ -140,7 +141,7 @@ require_host_tools() {
     printf 'Required ADB command is not installed: %s\n' "$ADB_BIN" >&2
     exit 2
   fi
-  for tool in base64 grep jq perl sed seq tail tr; do
+  for tool in base64 grep head jq perl sed seq tail tr; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       printf 'Required host command is not installed: %s\n' "$tool" >&2
       exit 2
@@ -306,6 +307,14 @@ require_device() {
   package_path="$(adb_run shell pm path "$APP_ID" 2>/dev/null | tr -d '\r')"
   if [[ "$package_path" != package:* ]]; then
     printf 'Debug APK %s is not installed.\n' "$APP_ID" >&2
+    exit 2
+  fi
+  INSTALLED_APP_VERSION="$(adb_run shell dumpsys package "$APP_ID" 2>/dev/null \
+    | tr -d '\r' \
+    | sed -nE 's/^[[:space:]]*versionName=(.*)$/\1/p' \
+    | head -n 1)"
+  if [[ -z "$INSTALLED_APP_VERSION" ]]; then
+    printf 'Could not read installed app version for %s.\n' "$APP_ID" >&2
     exit 2
   fi
 }
@@ -663,13 +672,13 @@ test_telemetry_schema_v3() {
   fi
   telemetry="$(adb_run exec-out run-as "$APP_ID" cat "$TELEMETRY_EXPORT" 2>/dev/null \
     | tr -d '\r')"
-  if jq -e -s '
+  if jq -e -s --arg app_version "$INSTALLED_APP_VERSION" '
       . as $rows
       | ([.[] | select(.edit_operation == "DELETE") | .correction_id][0]) as $composingCorrection
       | ([.[] | select(.edit_operation == "DELETE_COMMITTED") | .correction_id][0]) as $committedCorrection
       | length >= 8
       and ([.[] | keys | join(",")] | unique | length == 1)
-      and all(.[]; .schema_version == 3 and .app_version == "0.16.0"
+      and all(.[]; .schema_version == 3 and .app_version == $app_version
         and .engine_version != "" and .layout_version == "kotonoha-kana12-qwerty-v1")
       and any(.[]; .type == "COMPOSITION_EDIT" and .edit_operation == "INSERT"
         and .gesture_key == "た" and .gesture_direction == "UP"
