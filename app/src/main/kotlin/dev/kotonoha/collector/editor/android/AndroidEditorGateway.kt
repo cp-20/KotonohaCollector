@@ -21,32 +21,37 @@ internal class AndroidEditorGateway(
 
     override fun commitComposition(
         committedText: String,
-        remainingStyledText: CharSequence?,
+        _remainingStyledText: CharSequence?,
         remainingPlainText: String,
     ): CompositionCommitOutcome {
         val connection = connectionProvider()
             ?: return CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
         runCatching { connection.beginBatchEdit() }
         return try {
-            if (!runCatching { connection.commitText(committedText, 1) }.getOrDefault(false)) {
+            val replacement = committedText + remainingPlainText
+            if (!runCatching { connection.commitText(replacement, 1) }.getOrDefault(false)) {
                 CompositionCommitOutcome(false, RemainingTextOutcome.REJECTED)
             } else if (remainingPlainText.isEmpty()) {
                 CompositionCommitOutcome(true, RemainingTextOutcome.NONE)
-            } else if (
-                remainingStyledText != null &&
-                runCatching {
-                    connection.setComposingText(remainingStyledText, 1)
-                }.getOrDefault(false)
-            ) {
-                CompositionCommitOutcome(true, RemainingTextOutcome.COMPOSING)
-            } else if (
-                runCatching { connection.commitText(remainingPlainText, 1) }.getOrDefault(false)
-            ) {
-                // commitText above has already accepted the prefix. Preserve the suffix as
-                // literal text when the target editor cannot start a new composing range.
-                CompositionCommitOutcome(true, RemainingTextOutcome.COMMITTED_LITERAL)
             } else {
-                CompositionCommitOutcome(true, RemainingTextOutcome.REJECTED)
+                val cursor = runCatching {
+                    connection.getExtractedText(ExtractedTextRequest(), 0)?.let {
+                        it.startOffset + it.selectionEnd
+                    } ?: -1
+                }.getOrDefault(-1)
+                val suffixStart = cursor - remainingPlainText.length
+                if (
+                    suffixStart >= 0 &&
+                    runCatching {
+                        connection.setComposingRegion(suffixStart, cursor)
+                    }.getOrDefault(false)
+                ) {
+                    CompositionCommitOutcome(true, RemainingTextOutcome.COMPOSING)
+                } else {
+                    // The replacement already contains the suffix, so an editor that cannot
+                    // expose its cursor still preserves it once as literal text.
+                    CompositionCommitOutcome(true, RemainingTextOutcome.COMMITTED_LITERAL)
+                }
             }
         } finally {
             runCatching { connection.endBatchEdit() }
@@ -162,7 +167,8 @@ internal class AndroidEditorGateway(
 
     private fun extractedSelection(): Pair<Int, Int>? = withConnection<Pair<Int, Int>?>(null) {
         val extracted = it.getExtractedText(ExtractedTextRequest(), 0) ?: return@withConnection null
-        extracted.selectionStart to extracted.selectionEnd
+        val offset = extracted.startOffset
+        offset + extracted.selectionStart to offset + extracted.selectionEnd
     }
 
     private inline fun <T> withConnection(fallback: T, operation: (InputConnection) -> T): T {

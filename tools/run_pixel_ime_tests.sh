@@ -85,6 +85,11 @@ require_ime_window_visible() {
       && (( (visibility & 2) != 0 )); then
       return 0
     fi
+    # A cold API 36 emulator can relaunch the activity after wm size/density changes,
+    # invalidating its first showSoftInput request. Tap again once the new editor is served.
+    if (( attempt % 4 == 0 )); then
+      adb_run shell input tap 900 525 >/dev/null
+    fi
     sleep 0.25
   done
   printf 'Test IME did not become visible (selected=%s mImeWindowVis=%s).\n' \
@@ -600,6 +605,13 @@ test_partial_conversion_keeps_suffix() {
   fresh_pad "" "$TEST_COMMIT_PARTIAL_CONVERSION"
   assert_text "partial candidate commits only its consumed reading" "大学きた"
   assert_composition "partial candidate keeps only unread suffix composing" "2:4"
+
+  # Updating the unread suffix must replace its composing range, not append a second copy.
+  tap_key 324 1810
+  assert_text "next input does not duplicate the unread suffix" "大学きたあ"
+  assert_composition "next input keeps the extended suffix composing" "2:5"
+
+  fresh_pad "" "$TEST_COMMIT_PARTIAL_CONVERSION"
   flick_key 972 1810 850 1810
   assert_text "word delete removes the remaining composition only" "大学"
 }
